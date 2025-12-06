@@ -48,9 +48,7 @@ const logoutButton = document.getElementById('logout-button');
 let currentUser = sessionStorage.getItem('username');
 let replyTo = null;
 
-// Variables para manejo de la pulsación larga (long press)
-let longPressTimer;
-const LONG_PRESS_DURATION = 500; // 500 milisegundos
+// Las variables de pulsación larga ya no son necesarias.
 
 // --- 2. GESTIÓN DE AUTENTICACIÓN Y MANTENIMIENTO ---
 
@@ -148,7 +146,7 @@ function setupEmojiPicker() {
         emojiButton.addEventListener('click', (e) => {
             e.stopPropagation();
             // Cierra las acciones de mensaje si están abiertas
-            closeAllTouchActions(); 
+            closeAllMessageActions(); 
             emojiPickerContainer.style.display = emojiPickerContainer.style.display === 'none' ? 'block' : 'none';
         });
         
@@ -321,8 +319,8 @@ function displayMessage(messageId, message) {
 
     chatMessages.appendChild(messageWrapper);
     
-    // Configurar Eventos Táctiles
-    setupTouchActions(messageWrapper, actionsDiv);
+    // Configurar Evento de Clic/Toque
+    setupClickAction(messageWrapper, actionsDiv);
     
     // Scroll al final
     chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -335,7 +333,6 @@ function formatTimestamp(timestamp) {
     if (!timestamp) return '';
     const date = new Date(timestamp);
     const hours = date.getHours().toString().padStart(2, '0');
-    // 🥳 CORRECCIÓN: Se elimina la doble llamada que causaba el error TypeError
     const minutes = date.getMinutes().toString().padStart(2, '0'); 
     return `${hours}:${minutes}`;
 }
@@ -356,7 +353,7 @@ function createMessageActions(messageId, message) {
         document.getElementById('reply-text').textContent = message.text;
         replyPreview.style.display = 'flex';
         messageInput.focus();
-        closeAllTouchActions(); 
+        closeAllMessageActions(); 
     };
     actionsDiv.appendChild(replyButton);
     
@@ -379,7 +376,7 @@ function createMessageActions(messageId, message) {
             e.stopPropagation();
             toggleReaction(messageId, emoji);
             reactionSelector.style.display = 'none'; 
-            closeAllTouchActions();
+            closeAllMessageActions();
         };
         reactionSelector.appendChild(btn);
     });
@@ -437,78 +434,54 @@ function toggleReaction(messageId, emoji) {
 }
 
 // -------------------------------------------------------------
-// --- 6. GESTIÓN DE EVENTOS TÁCTILES (LONG PRESS) ---
+// --- 6. GESTIÓN DE EVENTOS: CLIC/TOQUE SIMPLE ---
 // -------------------------------------------------------------
 
 /**
- * 📱 Configura los eventos táctiles para mostrar las acciones de mensaje (Responder/Reaccionar).
+ * 🖱️ Configura el evento de clic simple para mostrar las acciones de mensaje.
+ * @param {HTMLElement} messageWrapper - El div principal del mensaje.
+ * @param {HTMLElement} actionsDiv - El div que contiene los botones de acción.
  */
-function setupTouchActions(messageWrapper, actionsDiv) {
-    // Si no es un dispositivo táctil, salimos para no interferir con el hover
-    if (!('ontouchstart' in window)) return;
-
-    let isScrolling = false;
-    let touchStartX = 0;
-    let touchStartY = 0;
-
-    // Prevenir que el toque inicie el scroll y permitir la detección de pulsación
-    messageWrapper.addEventListener('touchstart', (e) => {
-        // e.stopPropagation(); // Se puede comentar para permitir burbujeo si hay listeners parentales
-
-        closeAllTouchActions(); 
-
-        // Registra las coordenadas iniciales para detectar movimiento (scroll)
-        touchStartX = e.touches[0].clientX;
-        touchStartY = e.touches[0].clientY;
-        isScrolling = false;
-
-        // Inicia el temporizador
-        longPressTimer = setTimeout(() => {
-            if (!isScrolling) {
-                actionsDiv.classList.add('active-touch');
-            }
-        }, LONG_PRESS_DURATION);
-    }, { passive: true }); // Usamos { passive: true } para mejorar el rendimiento del scroll
-
-    // Cancela el temporizador si el dedo se mueve significativamente (indicando scroll)
-    messageWrapper.addEventListener('touchmove', (e) => {
-        const moveX = e.touches[0].clientX;
-        const moveY = e.touches[0].clientY;
-        
-        // Si hay un movimiento significativo, lo consideramos scroll
-        const movementThreshold = 10; 
-        if (Math.abs(moveX - touchStartX) > movementThreshold || Math.abs(moveY - touchStartY) > movementThreshold) {
-            clearTimeout(longPressTimer);
-            isScrolling = true;
+function setupClickAction(messageWrapper, actionsDiv) {
+    
+    // 1. Manejar el clic en el mensaje
+    messageWrapper.addEventListener('click', (e) => {
+        // Ignoramos el clic si el target es un botón DENTRO de las acciones (para que los botones funcionen)
+        if (e.target.closest('.message-actions')) {
+            return;
         }
-    }, { passive: true });
 
-
-    messageWrapper.addEventListener('touchend', (e) => {
-        // Cancela el temporizador si el toque se libera antes del tiempo límite
-        clearTimeout(longPressTimer);
+        // Cierra todas las demás acciones antes de abrir la actual
+        closeAllMessageActions(actionsDiv);
+        
+        // Alterna la visibilidad de las acciones de este mensaje
+        actionsDiv.classList.toggle('active-touch');
+        e.stopPropagation(); // Evita que el evento suba al document y lo cierre inmediatamente
     });
     
-    // Listener global para cerrar las acciones abiertas cuando se toca/clica fuera
+    // 2. Listener global para cerrar las acciones abiertas cuando se toca/clica fuera
     document.addEventListener('click', (e) => {
         // Cierra si el clic no es dentro de un mensaje ni dentro de las acciones abiertas
         if (!e.target.closest('.message') && !e.target.closest('.message-actions')) {
-             closeAllTouchActions();
+             closeAllMessageActions();
         }
     });
 }
 
 /**
- * Cierra todas las acciones de mensaje abiertas por evento táctil.
+ * Cierra todas las acciones de mensaje abiertas.
+ * @param {HTMLElement} [excludeActionsDiv=null] - Opcional: El div de acciones a excluir del cierre.
  */
-function closeAllTouchActions() {
+function closeAllMessageActions(excludeActionsDiv = null) {
     document.querySelectorAll('.message-actions').forEach(actionsDiv => {
-        actionsDiv.classList.remove('active-touch');
-        
-        // Cierra selectores de reacción que puedan estar flotando dentro de las acciones
-        const reactionSelector = actionsDiv.querySelector('.reaction-selector');
-        if (reactionSelector) {
-            reactionSelector.style.display = 'none';
+        if (actionsDiv !== excludeActionsDiv) {
+            actionsDiv.classList.remove('active-touch');
+            
+            // Cierra selectores de reacción que puedan estar flotando dentro de las acciones
+            const reactionSelector = actionsDiv.querySelector('.reaction-selector');
+            if (reactionSelector) {
+                reactionSelector.style.display = 'none';
+            }
         }
     });
 }

@@ -476,4 +476,15 @@ emoji-picker {
         left: 2.5vw; 
         bottom: 60px;
     }
+}/* En tu styles.css */
+
+/* Oculta las acciones por defecto */
+.message-actions { 
+    display: none !important; /* Asegúrate de que están ocultas si no hay hover */
+}
+
+/* Muestra las acciones al hacer clic/tocar (usamos la misma clase que antes) */
+.message-actions.active-touch {
+    display: flex !important; 
+    opacity: 1 !important;
 }
