@@ -48,8 +48,6 @@ const logoutButton = document.getElementById('logout-button');
 let currentUser = sessionStorage.getItem('username');
 let replyTo = null;
 
-// Las variables de pulsación larga ya no son necesarias.
-
 // --- 2. GESTIÓN DE AUTENTICACIÓN Y MANTENIMIENTO ---
 
 if (!currentUser) {
@@ -319,8 +317,8 @@ function displayMessage(messageId, message) {
 
     chatMessages.appendChild(messageWrapper);
     
-    // Configurar Evento de Clic/Toque
-    setupClickAction(messageWrapper, actionsDiv);
+    // Configurar Evento Táctil/Clic (versión robusta para móvil)
+    setupTouchAction(messageWrapper, actionsDiv);
     
     // Scroll al final
     chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -434,19 +432,20 @@ function toggleReaction(messageId, emoji) {
 }
 
 // -------------------------------------------------------------
-// --- 6. GESTIÓN DE EVENTOS: CLIC/TOQUE SIMPLE ---
+// --- 6. GESTIÓN DE EVENTOS TÁCTILES (TOQUE SIMPLE) ---
 // -------------------------------------------------------------
 
 /**
- * 🖱️ Configura el evento de clic simple para mostrar las acciones de mensaje.
- * @param {HTMLElement} messageWrapper - El div principal del mensaje.
- * @param {HTMLElement} actionsDiv - El div que contiene los botones de acción.
+ * 📱 Configura el evento de toque (touchstart) o clic para mostrar las acciones.
+ * Este método es más fiable en móvil que el evento 'click'.
  */
-function setupClickAction(messageWrapper, actionsDiv) {
+function setupTouchAction(messageWrapper, actionsDiv) {
     
-    // 1. Manejar el clic en el mensaje
-    messageWrapper.addEventListener('click', (e) => {
-        // Ignoramos el clic si el target es un botón DENTRO de las acciones (para que los botones funcionen)
+    // Bandera para evitar que touchstart y click se disparen a la vez en móvil
+    let touchExecuted = false; 
+
+    const handleAction = (e) => {
+        // Evita que los clics en los botones de acción cierren el menú inmediatamente.
         if (e.target.closest('.message-actions')) {
             return;
         }
@@ -456,16 +455,40 @@ function setupClickAction(messageWrapper, actionsDiv) {
         
         // Alterna la visibilidad de las acciones de este mensaje
         actionsDiv.classList.toggle('active-touch');
-        e.stopPropagation(); // Evita que el evento suba al document y lo cierre inmediatamente
-    });
+        e.stopPropagation(); 
+    };
+
+    // 1. Manejar el toque inicial (touchstart) - Preferido para móviles
+    messageWrapper.addEventListener('touchstart', (e) => {
+        // Marcamos que se ha ejecutado un evento táctil
+        touchExecuted = true;
+        // Usamos setTimeout para permitir un pequeño movimiento (scroll) antes de ejecutar la acción
+        // Si no hay movimiento, ejecuta la acción
+        setTimeout(() => {
+            handleAction(e);
+        }, 100); 
+    }, { passive: true });
     
-    // 2. Listener global para cerrar las acciones abiertas cuando se toca/clica fuera
+    // 2. Manejar el clic (fallback para PC o si touchstart no funciona por algún motivo)
+    messageWrapper.addEventListener('click', (e) => {
+        // Si ya se ejecutó un touchstart, ignoramos el evento click
+        if (touchExecuted) {
+            touchExecuted = false; // Reset para el siguiente toque
+            return;
+        }
+        handleAction(e);
+    });
+
+
+    // 3. Listener global para cerrar las acciones abiertas cuando se toca/clica fuera
     document.addEventListener('click', (e) => {
-        // Cierra si el clic no es dentro de un mensaje ni dentro de las acciones abiertas
         if (!e.target.closest('.message') && !e.target.closest('.message-actions')) {
              closeAllMessageActions();
         }
     });
+
+    // 4. Si el usuario comienza a desplazarse, cerramos el menú.
+    chatMessages.addEventListener('scroll', closeAllMessageActions, { passive: true });
 }
 
 /**
