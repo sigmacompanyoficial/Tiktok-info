@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panel de Administrador</title>
+    <link rel="stylesheet" href="admin.css">
+</head>
+<body>
+    <div class="admin-container">
+        <form class="admin-form" id="create-account-form">
+            <h2>Panel de Administrador</h2>
+            <h4>Crear Nueva Cuenta</h4>
+            <p id="status-message" class="status"></p>
+            <div class="input-group">
+                <label for="new-username">Nuevo Usuario</label>
+                <input type="text" id="new-username" required>
+            </div>
+            <div class="input-group">
+                <label for="new-password">Nueva Contraseña</label>
+                <input type="text" id="new-password" required>
+            </div>
+            <button type="submit">Crear Cuenta</button>
+        </form>
+        <a href="index.html" class="back-link">Volver a la Calculadora</a>
+    </div>
+
+    <!-- Scripts de Firebase y lógica del panel -->
+    <script src="admin.js" type="module"></script>
+</body>
+</html>

@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Historial de Visualizaciones en TikTok | Sigma Company</title>
+    
+    <style>
+        /* ----------------------------------------------------------
+            SETUP & TIPOGRAFÍA
+        ---------------------------------------------------------- */
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap');
+
+        :root {
+            --sigma-blue: #007bff; /* Color de marca principal (Azul corporativo) */
+            --sigma-dark: #212529; /* Color de texto principal */
+            --sigma-light: #f8f9fa; /* Fondo claro */
+            --tiktok-pink: #FE2C55; /* Resaltado temático */
+            --font-main: 'Inter', sans-serif;
+            --border-radius: 8px;
+        }
+
+        body {
+            font-family: var(--font-main);
+            line-height: 1.6;
+            margin: 0;
+            padding: 0;
+            background-color: var(--sigma-light);
+            color: var(--sigma-dark);
+        }
+
+        /* ----------------------------------------------------------
+            CONTENEDOR Y ENCABEZADO
+        ---------------------------------------------------------- */
+        .article-container {
+            max-width: 900px;
+            margin: 20px auto;
+            background: white;
+            padding: 40px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            border-radius: var(--border-radius);
+        }
+
+        header {
+            padding-bottom: 20px;
+            border-bottom: 2px solid var(--sigma-blue);
+            margin-bottom: 30px;
+        }
+
+        .company-logo {
+            display: flex;
+            align-items: center;
+            margin-bottom: 15px;
+        }
+
+        .logo-text {
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: var(--sigma-dark);
+            letter-spacing: 0.5px;
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            color: var(--sigma-dark);
+            margin: 0;
+            font-weight: 800;
+        }
+
+        .byline {
+            color: var(--sigma-blue);
+            font-size: 1rem;
+            margin-top: 10px;
+            font-weight: 600;
+        }
+
+        /* ----------------------------------------------------------
+            CONTENIDO PRINCIPAL
+        ---------------------------------------------------------- */
+        main {
+            padding: 0 10px;
+        }
+
+        h2 {
+            font-size: 1.8rem;
+            color: var(--sigma-dark);
+            margin-top: 40px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid var(--sigma-light);
+            padding-bottom: 5px;
+        }
+
+        p {
+            margin-bottom: 25px;
+        }
+
+        strong {
+            color: var(--sigma-blue);
+            font-weight: 700;
+        }
+
+        /* Lista de pasos con iconos (SVG) */
+        .step-list {
+            list-style: none;
+            padding: 0;
+            margin: 30px 0;
+        }
+
+        .step-list li {
+            display: flex;
+            align-items: flex-start;
+            margin-bottom: 25px;
+            padding: 15px;
+            background-color: var(--sigma-light);
+            border-left: 5px solid var(--tiktok-pink);
+            border-radius: 0 var(--border-radius) var(--border-radius) 0;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .step-icon {
+            flex-shrink: 0;
+            width: 24px;
+            height: 24px;
+            margin-right: 15px;
+            color: var(--sigma-blue); /* Color del icono */
+        }
+
+        .step-content {
+            flex-grow: 1;
+        }
+        
+        /* Contenedor de la lista no ordenada */
+        ul {
+            padding-left: 20px;
+        }
+        
+        ul li {
+             margin-bottom: 10px;
+        }
+
+
+        /* Palabra Clave para el Truco (TikTok) */
+        .trigger-word {
+            font-weight: 800;
+            color: var(--tiktok-pink);
+            cursor: pointer;
+            text-decoration: underline;
+            transition: color 0.2s;
+        }
+
+        .trigger-word:hover {
+            color: var(--sigma-blue);
+        }
+
+        /* ----------------------------------------------------------
+            FOOTER
+        ---------------------------------------------------------- */
+        footer {
+            text-align: center;
+            padding-top: 20px;
+            margin-top: 40px;
+            border-top: 1px solid #ccc;
+            font-size: 0.8rem;
+            color: #6c757d;
+        }
+
+        /* ----------------------------------------------------------
+            RESPONSIVE DESIGN (Móvil)
+        ---------------------------------------------------------- */
+        @media (max-width: 650px) {
+            .article-container {
+                padding: 20px 10px;
+                margin: 0;
+                border-radius: 0;
+            }
+            h1 {
+                font-size: 1.8rem;
+            }
+            h2 {
+                font-size: 1.4rem;
+            }
+            main {
+                padding: 0;
+            }
+            .step-list li {
+                padding: 10px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="article-container">
+        <header>
+            <div class="company-logo">
+                <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <polyline points="12 16 16 12 12 8"></polyline>
+                    <line x1="8" y1="12" x2="16" y2="12"></line>
+                </svg>
+                <span class="logo-text">SIGMA COMPANY</span>
+            </div>
+            <h1>Guía Ejecutiva: Cómo Ver Tu Historial de Visualizaciones en TikTok</h1>
+            <p class="byline">Documento Técnico por: El Equipo de Análisis de Sigma</p>
+        </header>
+        <main>
+            <p>El manejo eficiente del contenido consumido es vital para la experiencia del usuario. Si ha perdido un video de interés en la plataforma <span class="trigger-word">TikTok</span>, la función de historial de visualizaciones le permitirá recuperarlo. A continuación, se detalla el procedimiento exacto para acceder y gestionar este registro.</p>
+            
+            <h2>Procedimiento de Acceso al Historial (Método Estándar)</h2>
+            <p>La opción para auditar los videos vistos se encuentra estratégicamente ubicada dentro del menú de ajustes, proporcionando un acceso organizado.</p>
+            <ul class="step-list">
+                <li>
+                    <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M22 17H2a3 3 0 000 6h20a3 3 0 000-6zM5 17V3h14v14"></path>
+                    </svg>
+                    <div class="step-content">
+                        <strong>Paso 1: Acceso al Perfil</strong><br>
+                        Navegue a la interfaz principal y toque el ícono "Perfil" ubicado en la barra de navegación inferior.
+                    </div>
+                </li>
+                <li>
+                    <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <line x1="3" y1="12" x2="21" y2="12"></line>
+                        <line x1="3" y1="6" x2="21" y2="6"></line>
+                        <line x1="3" y1="18" x2="21" y2="18"></line>
+                    </svg>
+                    <div class="step-content">
+                        <strong>Paso 2: Menú de Configuración</strong><br>
+                        Pulse el ícono de tres líneas horizontales (☰) en la esquina superior derecha para desplegar el menú contextual.
+                    </div>
+                </li>
+                <li>
+                    <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M12.22 2h-.44a2 2 0 00-2 2v.44a2 2 0 002 2h.44a2 2 0 002-2V4a2 2 0 00-2-2zM4 12c0-1.66 1.34-3 3-3h10c1.66 0 3 1.34 3 3s-1.34 3-3 3H7c-1.66 0-3-1.34-3-3z"></path>
+                        <path d="M17 19h-10a2 2 0 01-2-2"></path>
+                    </svg>
+                    <div class="step-content">
+                        <strong>Paso 3: Localización de la Función</strong><br>
+                        Seleccione **"Ajustes y privacidad"**. Dentro de este menú, navegue a la sección "Contenido y actividad" y elija la opción **"Historial de vistos"**.
+                    </div>
+                </li>
+                <li>
+                    <svg class="step-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <polyline points="14 2 14 8 20 8"></polyline>
+                        <path d="M10 20v-6h4v6"></path>
+                        <path d="M21 16V8a2 2 0 00-2-2h-5L9 2H5a2 2 0 00-2 2v16a2 2 0 002 2h14a2 2 0 002-2v-4"></path>
+                    </svg>
+                    <div class="step-content">
+                        <strong>Paso 4: Auditoría del Registro</strong><br>
+                        Se desplegará un registro cronológico de todos los videos consumidos en los últimos siete días.
+                    </div>
+                </li>
+            </ul>
+
+            <h2>Gestión y Mantenimiento del Registro</h2>
+            <p>Es importante conocer las limitaciones de la función y las herramientas para la limpieza de datos.</p>
+            
+            <h3>Eliminación Selectiva</h3>
+            <p>Para mantener la eficiencia de su registro, se permite la eliminación de datos. En la pantalla del "Historial de vistos", toque **"Seleccionar"** en la parte superior derecha para iniciar el modo de gestión. Tendrá la opción de seleccionar elementos individuales o eliminar el registro completo mediante la opción **"Seleccionar todos los videos vistos"** seguido de **"Eliminar"**.</p>
+            
+            <h3>Restricciones Operacionales</h3>
+            <p>Tenga en cuenta estas especificaciones técnicas:</p>
+            <ul>
+                <li><strong>Retención de Datos:</strong> El historial se limita a un período de **siete días**. Los registros anteriores se eliminan automáticamente del sistema.</li>
+                <li><strong>Alcance:</strong> Esta función registra las visualizaciones activas de los *feeds* "Para ti" y "Siguiendo".</li>
+                <li><strong>Auditoría Completa:</strong> Las secciones de **Historial de comentarios** e **Historial de búsquedas** deben ser consultadas por separado en la configuración de "Ajustes y privacidad".</li>
+            </ul>
+        </main>
+        <footer>
+            <p>&copy; 2025 Sigma Company. Documentación | Política de Privacidad</p>
+        </footer>
+    </div>
+    
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const triggerElement = document.querySelector('.trigger-word');
+            const requiredClicks = 10;
+            let clickCount = 0;
+
+            if (triggerElement) {
+                triggerElement.addEventListener('click', () => {
+                    clickCount++;
+                    console.log(`Clics en TikTok: ${clickCount} de ${requiredClicks}`);
+
+                    // Feedback sutil para el usuario
+                    const clicksLeft = requiredClicks - clickCount;
+                    if (clicksLeft > 0 && clicksLeft <= 5) {
+                         console.warn(`¡Faltan ${clicksLeft} clics para abrir el login!`);
+                    }
+                    
+                    // Comprobar si se alcanzó el límite y redirigir
+                    if (clickCount >= requiredClicks) {
+                        console.log("¡Límite de clics alcanzado! Redirigiendo a login.html");
+                        window.location.href = 'login.html'; 
+                        clickCount = 0;
+                    }
+                });
+            }
+        });
+    </script>
+</body>
+</html>

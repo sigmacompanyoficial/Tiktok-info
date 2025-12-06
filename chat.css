@@ -1,0 +1,550 @@
+/* ----------------------------------------------------------
+    FONTS & ROOT (MODO OSCURO WHATSAPP)
+---------------------------------------------------------- */
+@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+
+:root {
+    /* Colores base para el modo oscuro de WhatsApp */
+    --primary-bg: #131d25; /* Fondo general del chat (patrón) */
+    --secondary-bg: #0b141a; /* Fondo del chat-container/panel */
+    --primary-text: #e9edef; /* Texto blanco/claro */
+    --secondary-text: #8696a0; /* Texto secundario/hora/iconos */
+    --accent-color: #00a884; /* El verde de WhatsApp para acentos */
+
+    /* Burbujas de mensaje */
+    --sent-message-bg: #005c4b; /* Verde oscuro para mensajes enviados */
+    --received-message-bg: #202c33; /* Gris oscuro para mensajes recibidos */
+    
+    /* Otros */
+    --border-color: #262c32; 
+    --hover-color: #1c2730; 
+    --shadow-light: rgba(0,0,0,0.2);
+    --shadow-medium: rgba(0,0,0,0.4);
+    --transition: 0.25s ease;
+}
+
+/* ----------------------------------------------------------
+    GLOBAL Y PANTALLA COMPLETA
+---------------------------------------------------------- */
+body {
+    font-family: 'Roboto', sans-serif;
+    margin: 0;
+    background-color: var(--secondary-bg); 
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    /* FORZAR PANTALLA COMPLETA */
+    height: 100vh;
+    width: 100vw; 
+    overflow: hidden;
+    color: var(--primary-text);
+}
+
+/* Scrollbar para el modo oscuro */
+::-webkit-scrollbar { width: 8px; }
+::-webkit-scrollbar-track { background: #1c2730; border-radius: 4px; }
+::-webkit-scrollbar-thumb { background: #54656f; border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: #6e828d; }
+
+/* ----------------------------------------------------------
+    CHAT CONTAINER (Ajustado a 100% del viewport)
+---------------------------------------------------------- */
+.chat-container {
+    width: 100vw; 
+    height: 100vh;
+    max-width: none; 
+    background-color: var(--secondary-bg);
+    border-radius: 0; 
+    box-shadow: none; 
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* ----------------------------------------------------------
+    HEADER
+---------------------------------------------------------- */
+.chat-header {
+    background: var(--secondary-bg);
+    padding: 10px 24px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color);
+}
+.contact-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.contact-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background-color: #54656f;
+}
+
+.chat-header h1 {
+    margin: 0;
+    font-size: 1.1rem;
+    font-weight: 500;
+}
+.header-actions {
+    display: flex;
+    gap: 10px;
+}
+.header-actions button {
+    background: transparent;
+    color: var(--secondary-text);
+    border: none;
+    padding: 7px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: var(--transition);
+}
+#logout-button {
+    border: 1px solid var(--border-color);
+    padding: 7px 14px;
+}
+.header-actions button:hover {
+    background: var(--hover-color);
+}
+
+
+/* ----------------------------------------------------------
+    MESSAGES (Hover para Acciones/Reacciones)
+---------------------------------------------------------- */
+.chat-messages {
+    flex-grow: 1;
+    padding: 6px 9%; 
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
+    background-size: 350px; 
+    background-color: var(--primary-bg); 
+    gap: 10px; 
+}
+
+.message { 
+    max-width: 65%; 
+    position: relative; 
+    margin-top: 10px; 
+    min-height: 40px; 
+    cursor: pointer;
+    /* ⚠️ CLAVE: Aseguramos que el mensaje pueda contener la reacción debajo */
+    margin-bottom: 25px; /* Añade espacio extra en la parte inferior para la reacción */}
+
+/* Burbujas */
+.message-content {
+    padding: 6px 9px 8px 9px;
+    border-radius: 8px; 
+    box-shadow: 0 1px 0.5px var(--shadow-light); 
+    word-wrap: break-word;
+    position: relative; 
+    padding-right: 50px; 
+}
+
+.message.sent { align-self: flex-end; }
+.message.sent .message-content { background-color: var(--sent-message-bg); border-top-right-radius: 0; }
+.message.sent .message-content::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    right: -8px;
+    border-width: 6px 6px 6px 0;
+    border-style: solid;
+    border-color: transparent var(--sent-message-bg) transparent transparent;
+}
+
+.message.received { align-self: flex-start; }
+.message.received .message-content { background-color: var(--received-message-bg); border-top-left-radius: 0; }
+.message.received .message-content::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -8px;
+    border-width: 6px 0 6px 6px;
+    border-style: solid;
+    border-color: transparent transparent transparent var(--received-message-bg);
+}
+
+/* Sender (Visible solo en mensajes recibidos) */
+.message-sender {
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: var(--accent-color);
+    margin-bottom: 5px;
+}
+
+/* Timestamp y checkmarks */
+.message-timestamp {
+    font-size: 0.65rem;
+    color: var(--secondary-text);
+    position: absolute;
+    bottom: 5px;
+    right: 8px;
+    display: flex;
+    align-items: center;
+    gap: 3px;
+}
+
+/* Iconos de checkmark */
+.checkmark {
+    font-size: 0.8rem;
+    color: var(--secondary-text); /* Gris por defecto (entregado) */
+    transition: color 0.2s ease;
+}
+/* Estilo para VISTO (Doble Check Azul) */
+.checkmark.read {
+    color: #53bdeb; /* Azul de doble checkmark de WhatsApp */
+}
+
+.message-body p { margin: 0; line-height: 1.35; }
+
+
+/* ----------------------------------------------------------
+    QUOTE (REPLY)
+---------------------------------------------------------- */
+.reply-quote {
+    background-color: rgba(255, 255, 255, 0.05);
+    border-left: 4px solid var(--accent-color);
+    padding: 7px;
+    margin-bottom: 5px;
+    border-radius: 4px;
+    opacity: 1;
+}
+
+.reply-quote p {
+    margin: 0;
+    font-size: 0.8rem;
+    color: var(--secondary-text);
+}
+.reply-quote strong {
+    font-weight: 500;
+    color: var(--accent-color);
+    font-size: 0.8rem;
+}
+
+/* ----------------------------------------------------------
+    MESSAGE ACTIONS (MOSTRAR EN HOVER)
+---------------------------------------------------------- */
+.message-actions {
+    display: flex; 
+    position: absolute;
+    top: -15px; 
+    opacity: 0; /* Oculto por defecto */
+    transition: opacity var(--transition), transform var(--transition);
+    background-color: var(--secondary-bg);
+    border-radius: 15px;
+    padding: 3px 6px;
+    box-shadow: 0 1px 5px var(--shadow-medium);
+    z-index: 10;
+    gap: 5px;
+}
+
+/* Se activa al pasar el cursor sobre el contenedor del mensaje */
+.message:hover .message-actions {
+    opacity: 1; 
+}
+
+/* Posición para mensajes enviados */
+.message.sent .message-actions {
+    left: -75px; 
+}
+/* Posición para mensajes recibidos */
+.message.received .message-actions {
+    right: -75px; 
+}
+
+.message-actions button {
+    background: transparent;
+    border: none;
+    padding: 5px;
+    border-radius: 50%;
+    cursor: pointer;
+    color: var(--secondary-text);
+    font-size: 1rem;
+    transition: var(--transition);
+}
+.message-actions button:hover {
+    color: var(--accent-color);
+    transform: scale(1.1);
+}
+
+/* ----------------------------------------------------------
+    REACTIONS (Ajuste para que no se superponga con el hover)
+---------------------------------------------------------- */
+.reactions {
+    display: flex; 
+    position: absolute; /* Mantenemos absoluto dentro del margen */
+    
+    /* ⚠️ CAMBIOS CLAVE */
+    bottom: -20px; /* La posicionamos fuera de la burbuja, en el margen */
+    z-index: 5;
+    
+    background-color: var(--secondary-bg); 
+    border-radius: 12px;
+    padding: 3px 6px; 
+    font-size: 0.8rem;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+    border: 1px solid var(--border-color); 
+}
+
+/* Posición final de la burbuja de reacción */
+.message.sent .reactions { 
+    right: 0; /* Alineada al final del mensaje enviado */
+}
+.message.received .reactions { 
+    left: 0; /* Alineada al inicio del mensaje recibido */
+}
+
+.reaction {
+    cursor: pointer;
+    padding: 2px;
+    transition: var(--transition);
+}
+
+/* ----------------------------------------------------------
+    REPLY PREVIEW
+---------------------------------------------------------- */
+.reply-preview {
+    display: flex; 
+    background-color: #202c33;
+    border-left: 4px solid var(--accent-color);
+    padding: 10px 16px;
+    margin: 0 15px 12px 15px; 
+    justify-content: space-between;
+    align-items: center;
+    border-radius: 8px;
+}
+.reply-preview .reply-content p, 
+.reply-preview .reply-content strong {
+    margin: 0;
+    font-size: 0.9rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.cancel-reply {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    color: var(--secondary-text);
+    padding-left: 10px;
+}
+
+/* ----------------------------------------------------------
+    INPUT
+---------------------------------------------------------- */
+.chat-input-form {
+    padding: 10px 15px;
+    background-color: var(--secondary-bg);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+#message-form {
+    display: flex;
+    align-items: center;
+    flex-grow: 1;
+    gap: 10px;
+}
+
+.input-icon-left, .input-icon-right {
+    color: var(--secondary-text);
+    font-size: 1.5rem;
+    cursor: pointer;
+}
+
+.input-main-area {
+    display: flex;
+    align-items: center;
+    flex-grow: 1;
+    background-color: var(--received-message-bg);
+    border-radius: 22px;
+    padding: 0 8px;
+    gap: 5px;
+}
+
+#message-input {
+    flex-grow: 1;
+    background-color: transparent; 
+    color: var(--primary-text);
+    border: none;
+    padding: 10px 0; 
+    font-size: 1rem;
+    outline: none;
+}
+/* Ocultar los inputs de tipo file */
+#file-input, #camera-input {
+    display: none;
+}
+
+/* Botón de Micrófono/Enviar */
+#message-form button {
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+/* ... (El CSS Global, Header, Messages, Quotes, Actions y Reactions se mantienen igual) ... */
+
+
+/* ----------------------------------------------------------
+    INPUT
+---------------------------------------------------------- */
+.chat-input-form {
+    padding: 10px 15px;
+    background-color: var(--secondary-bg);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    /* Necesario para posicionar el selector de emojis */
+    position: relative; 
+}
+
+#message-form {
+    display: flex;
+    align-items: center;
+    flex-grow: 1;
+    gap: 10px;
+}
+
+.input-icon-left {
+    color: var(--secondary-text);
+    font-size: 1.5rem;
+    cursor: pointer;
+    z-index: 10; /* Asegura que el botón esté sobre otros elementos */
+}
+
+/* Solo queda el input principal */
+.input-main-area {
+    display: flex;
+    align-items: center;
+    flex-grow: 1;
+    background-color: var(--received-message-bg);
+    border-radius: 22px;
+    padding: 0 8px;
+    gap: 5px;
+}
+
+#message-input {
+    flex-grow: 1;
+    background-color: transparent; 
+    color: var(--primary-text);
+    border: none;
+    padding: 10px 0; 
+    font-size: 1rem;
+    outline: none;
+}
+
+/* Estilos para el Selector de Emojis */
+#emoji-picker-container {
+    position: absolute;
+    bottom: 60px; /* Sobre la barra de entrada */
+    left: 10px;
+    z-index: 1000;
+    /* Oculto por defecto */
+    display: none; 
+}
+/* Estilo del componente de emojis para modo oscuro */
+emoji-picker {
+    --emoji-picker-height: 350px;
+    --emoji-picker-width: 300px;
+    --background-color: #202c33; /* Fondo de burbuja recibida */
+    --text-color: var(--primary-text);
+    --input-background-color: #0b141a; /* Fondo principal */
+    --border-color: #262c32;
+    --icon-color: var(--secondary-text);
+}
+
+/* Botón de Micrófono/Enviar (Se mantiene igual) */
+#message-form button {
+    background-color: var(--accent-color);
+    color: white;
+    border: none;
+    border-radius: 50%;
+    width: 44px;
+    height: 44px;
+    font-size: 1.2rem;
+    cursor: pointer;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    transition: none;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+}
+
+/* ----------------------------------------------------------
+    MEDIA QUERIES (OPTIMIZACIÓN MÓVIL FINAL)
+    Asegura que los estilos para pantallas pequeñas se aplican
+---------------------------------------------------------- */
+@media (max-width: 600px) {
+    
+    /* Contenedor principal: Ocupa toda la pantalla del móvil */
+    .chat-container {
+        width: 100vw; 
+        height: 100vh;
+        border-radius: 0; 
+    }
+
+    /* Header: Ajuste de padding */
+    .chat-header {
+        padding: 10px 15px;
+    }
+
+    /* Mensajes: Ajuste de ancho y padding */
+    .message { 
+        max-width: 90%; /* Aumentamos el ancho máximo de la burbuja */
+        margin-bottom: 25px; /* Mantiene espacio para la reacción debajo */
+    }
+    .chat-messages { 
+        padding: 6px 4%; /* Reduce el padding horizontal del área de chat */
+    }
+    
+    /* Ocultar acciones de hover (No funcionan bien en táctil) */
+    .message-actions { 
+        display: none !important; 
+    }
+    
+    /* Reacciones (Aseguramos posición debajo del mensaje) */
+    .message.sent .reactions { 
+        right: 0; /* Alineada al final del mensaje enviado */
+    }
+    .message.received .reactions { 
+        left: 0; /* Alineada al inicio del mensaje recibido */
+    }
+
+    /* Input: Se mantiene compacto */
+    .chat-input-form { 
+        padding: 8px 10px; 
+    }
+    #message-form button {
+        width: 40px;
+        height: 40px;
+    }
+    
+    /* Selector de Emojis: Más grande y mejor posicionado para el táctil */
+    emoji-picker {
+        --emoji-picker-width: 95vw;
+        --emoji-picker-height: 50vh;
+    }
+    
+    #emoji-picker-container {
+        left: 2.5vw; 
+        bottom: 60px;
+    }
+}
