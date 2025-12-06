@@ -48,6 +48,10 @@ const logoutButton = document.getElementById('logout-button');
 let currentUser = sessionStorage.getItem('username');
 let replyTo = null;
 
+// Variables para manejo de la pulsación larga (long press)
+let longPressTimer;
+const LONG_PRESS_DURATION = 500; // 500 milisegundos
+
 // --- 2. GESTIÓN DE AUTENTICACIÓN Y MANTENIMIENTO ---
 
 if (!currentUser) {
@@ -85,12 +89,13 @@ const checkChatActivity = () => {
 checkChatActivity(); 
 
 /**
- * 🗑️ Mantiene solo los últimos 20 mensajes. (CORREGIDO el error numChildren y ref)
+ * 🗑️ Mantiene solo los últimos 20 mensajes. 
  */
 function trimMessages() {
     get(messagesRef).then((snapshot) => {
         if (!snapshot.exists()) return; 
 
+        // Solución robusta para contar hijos
         const total = snapshot.numChildren ? snapshot.numChildren() : Object.keys(snapshot.val() || {}).length;
 
         if (total > MAX_MESSAGES) {
@@ -106,7 +111,6 @@ function trimMessages() {
             const itemsToDelete = total - MAX_MESSAGES;
             
             for (let i = 0; i < itemsToDelete; i++) {
-                // ⚠️ CORRECCIÓN: Aseguramos que el elemento existe antes de acceder a .ref
                 if (children[i] && children[i].ref) {
                     remove(children[i].ref);
                 }
@@ -143,6 +147,8 @@ function setupEmojiPicker() {
 
         emojiButton.addEventListener('click', (e) => {
             e.stopPropagation();
+            // Cierra las acciones de mensaje si están abiertas
+            closeAllTouchActions(); 
             emojiPickerContainer.style.display = emojiPickerContainer.style.display === 'none' ? 'block' : 'none';
         });
         
@@ -298,7 +304,7 @@ function displayMessage(messageId, message) {
         checkIconHtml = `<i class="fas fa-check-double checkmark${readClass}"></i>`;
     }
     
-    timestampSpan.innerHTML = formatTimestamp(message.timestamp) + checkIconHtml;
+    timestampSpan.innerHTML = formatTimestamp(message.timestamp) + checkIconHtml; 
     messageContentDiv.appendChild(timestampSpan);
     
     messageWrapper.appendChild(messageContentDiv);
@@ -315,14 +321,22 @@ function displayMessage(messageId, message) {
 
     chatMessages.appendChild(messageWrapper);
     
+    // Configurar Eventos Táctiles
+    setupTouchActions(messageWrapper, actionsDiv);
+    
+    // Scroll al final
     chatMessages.scrollTop = chatMessages.scrollHeight;
 }
 
+/**
+ * ⏰ Función corregida para el formato de hora.
+ */
 function formatTimestamp(timestamp) {
     if (!timestamp) return '';
     const date = new Date(timestamp);
     const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
+    // 🥳 CORRECCIÓN: Se elimina la doble llamada que causaba el error TypeError
+    const minutes = date.getMinutes().toString().padStart(2, '0'); 
     return `${hours}:${minutes}`;
 }
 
@@ -342,6 +356,7 @@ function createMessageActions(messageId, message) {
         document.getElementById('reply-text').textContent = message.text;
         replyPreview.style.display = 'flex';
         messageInput.focus();
+        closeAllTouchActions(); 
     };
     actionsDiv.appendChild(replyButton);
     
@@ -364,6 +379,7 @@ function createMessageActions(messageId, message) {
             e.stopPropagation();
             toggleReaction(messageId, emoji);
             reactionSelector.style.display = 'none'; 
+            closeAllTouchActions();
         };
         reactionSelector.appendChild(btn);
     });
@@ -416,6 +432,83 @@ function toggleReaction(messageId, emoji) {
             remove(reactionRef); 
         } else {
             set(reactionRef, emoji); 
+        }
+    });
+}
+
+// -------------------------------------------------------------
+// --- 6. GESTIÓN DE EVENTOS TÁCTILES (LONG PRESS) ---
+// -------------------------------------------------------------
+
+/**
+ * 📱 Configura los eventos táctiles para mostrar las acciones de mensaje (Responder/Reaccionar).
+ */
+function setupTouchActions(messageWrapper, actionsDiv) {
+    // Si no es un dispositivo táctil, salimos para no interferir con el hover
+    if (!('ontouchstart' in window)) return;
+
+    let isScrolling = false;
+    let touchStartX = 0;
+    let touchStartY = 0;
+
+    // Prevenir que el toque inicie el scroll y permitir la detección de pulsación
+    messageWrapper.addEventListener('touchstart', (e) => {
+        // e.stopPropagation(); // Se puede comentar para permitir burbujeo si hay listeners parentales
+
+        closeAllTouchActions(); 
+
+        // Registra las coordenadas iniciales para detectar movimiento (scroll)
+        touchStartX = e.touches[0].clientX;
+        touchStartY = e.touches[0].clientY;
+        isScrolling = false;
+
+        // Inicia el temporizador
+        longPressTimer = setTimeout(() => {
+            if (!isScrolling) {
+                actionsDiv.classList.add('active-touch');
+            }
+        }, LONG_PRESS_DURATION);
+    }, { passive: true }); // Usamos { passive: true } para mejorar el rendimiento del scroll
+
+    // Cancela el temporizador si el dedo se mueve significativamente (indicando scroll)
+    messageWrapper.addEventListener('touchmove', (e) => {
+        const moveX = e.touches[0].clientX;
+        const moveY = e.touches[0].clientY;
+        
+        // Si hay un movimiento significativo, lo consideramos scroll
+        const movementThreshold = 10; 
+        if (Math.abs(moveX - touchStartX) > movementThreshold || Math.abs(moveY - touchStartY) > movementThreshold) {
+            clearTimeout(longPressTimer);
+            isScrolling = true;
+        }
+    }, { passive: true });
+
+
+    messageWrapper.addEventListener('touchend', (e) => {
+        // Cancela el temporizador si el toque se libera antes del tiempo límite
+        clearTimeout(longPressTimer);
+    });
+    
+    // Listener global para cerrar las acciones abiertas cuando se toca/clica fuera
+    document.addEventListener('click', (e) => {
+        // Cierra si el clic no es dentro de un mensaje ni dentro de las acciones abiertas
+        if (!e.target.closest('.message') && !e.target.closest('.message-actions')) {
+             closeAllTouchActions();
+        }
+    });
+}
+
+/**
+ * Cierra todas las acciones de mensaje abiertas por evento táctil.
+ */
+function closeAllTouchActions() {
+    document.querySelectorAll('.message-actions').forEach(actionsDiv => {
+        actionsDiv.classList.remove('active-touch');
+        
+        // Cierra selectores de reacción que puedan estar flotando dentro de las acciones
+        const reactionSelector = actionsDiv.querySelector('.reaction-selector');
+        if (reactionSelector) {
+            reactionSelector.style.display = 'none';
         }
     });
 }

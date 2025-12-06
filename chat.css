@@ -26,17 +26,18 @@
 /* ----------------------------------------------------------
     GLOBAL Y PANTALLA COMPLETA
 ---------------------------------------------------------- */
-body {
+body, html {
     font-family: 'Roboto', sans-serif;
     margin: 0;
+    padding: 0;
     background-color: var(--secondary-bg); 
     display: flex;
     justify-content: center;
     align-items: center;
-    /* FORZAR PANTALLA COMPLETA */
+    /* FORZAR PANTALLA COMPLETA EN MÓVILES */
     height: 100vh;
     width: 100vw; 
-    overflow: hidden;
+    overflow: hidden; /* Controlamos el scroll solo dentro de chat-messages */
     color: var(--primary-text);
 }
 
@@ -71,20 +72,19 @@ body {
     justify-content: space-between;
     align-items: center;
     border-bottom: 1px solid var(--border-color);
+    flex-shrink: 0; /* Asegura que no se reduzca */
 }
 .contact-info {
     display: flex;
     align-items: center;
     gap: 10px;
 }
-
 .contact-avatar {
     width: 40px;
     height: 40px;
     border-radius: 50%;
     background-color: #54656f;
 }
-
 .chat-header h1 {
     margin: 0;
     font-size: 1.1rem;
@@ -113,7 +113,7 @@ body {
 
 
 /* ----------------------------------------------------------
-    MESSAGES (Hover para Acciones/Reacciones)
+    MESSAGES AREA
 ---------------------------------------------------------- */
 .chat-messages {
     flex-grow: 1;
@@ -125,6 +125,9 @@ body {
     background-size: 350px; 
     background-color: var(--primary-bg); 
     gap: 10px; 
+    
+    /* ⚠️ CLAVE PARA MÓVILES: Deja espacio para la barra de entrada Fija */
+    padding-bottom: 80px; 
 }
 
 .message { 
@@ -133,8 +136,9 @@ body {
     margin-top: 10px; 
     min-height: 40px; 
     cursor: pointer;
-    /* ⚠️ CLAVE: Aseguramos que el mensaje pueda contener la reacción debajo */
-    margin-bottom: 25px; /* Añade espacio extra en la parte inferior para la reacción */}
+    /* Espacio extra en la parte inferior para la burbuja de reacción */
+    margin-bottom: 25px; 
+}
 
 /* Burbujas */
 .message-content {
@@ -234,7 +238,7 @@ body {
     display: flex; 
     position: absolute;
     top: -15px; 
-    opacity: 0; /* Oculto por defecto */
+    opacity: 0; 
     transition: opacity var(--transition), transform var(--transition);
     background-color: var(--secondary-bg);
     border-radius: 15px;
@@ -244,16 +248,12 @@ body {
     gap: 5px;
 }
 
-/* Se activa al pasar el cursor sobre el contenedor del mensaje */
 .message:hover .message-actions {
     opacity: 1; 
 }
-
-/* Posición para mensajes enviados */
 .message.sent .message-actions {
     left: -75px; 
 }
-/* Posición para mensajes recibidos */
 .message.received .message-actions {
     right: -75px; 
 }
@@ -274,16 +274,13 @@ body {
 }
 
 /* ----------------------------------------------------------
-    REACTIONS (Ajuste para que no se superponga con el hover)
+    REACTIONS
 ---------------------------------------------------------- */
 .reactions {
     display: flex; 
-    position: absolute; /* Mantenemos absoluto dentro del margen */
-    
-    /* ⚠️ CAMBIOS CLAVE */
-    bottom: -20px; /* La posicionamos fuera de la burbuja, en el margen */
+    position: absolute; 
+    bottom: -20px; 
     z-index: 5;
-    
     background-color: var(--secondary-bg); 
     border-radius: 12px;
     padding: 3px 6px; 
@@ -292,12 +289,11 @@ body {
     border: 1px solid var(--border-color); 
 }
 
-/* Posición final de la burbuja de reacción */
 .message.sent .reactions { 
-    right: 0; /* Alineada al final del mensaje enviado */
+    right: 0; 
 }
 .message.received .reactions { 
-    left: 0; /* Alineada al inicio del mensaje recibido */
+    left: 0; 
 }
 
 .reaction {
@@ -310,7 +306,7 @@ body {
     REPLY PREVIEW
 ---------------------------------------------------------- */
 .reply-preview {
-    display: flex; 
+    display: none; /* Se mostrará con JS */
     background-color: #202c33;
     border-left: 4px solid var(--accent-color);
     padding: 10px 16px;
@@ -318,6 +314,7 @@ body {
     justify-content: space-between;
     align-items: center;
     border-radius: 8px;
+    flex-shrink: 0; /* Asegura que no se encoja */
 }
 .reply-preview .reply-content p, 
 .reply-preview .reply-content strong {
@@ -336,34 +333,41 @@ body {
 }
 
 /* ----------------------------------------------------------
-    INPUT
+    INPUT BAR (CORREGIDO Y UNIFICADO)
 ---------------------------------------------------------- */
-.chat-input-form {
-    padding: 10px 15px;
-    background-color: var(--secondary-bg);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
 
+/* ⚠️ ELIMINAMOS .chat-input-form y usamos directamente #message-form para el posicionamiento fijo */
 #message-form {
-    display: flex;
+    /* ⚠️ CLAVE: Fija el formulario en la parte inferior de la pantalla */
+    position: fixed; 
+    bottom: 0;
+    left: 0;
+    right: 0;
+    
+    z-index: 1000; 
+    
+    padding: 8px 10px; /* Ajuste de padding para móviles */
+    background-color: var(--secondary-bg); /* Usamos el color de fondo del chat-container */
+    box-shadow: 0 -2px 5px var(--shadow-medium); /* Sombra hacia arriba */
+    
+    display: flex; 
     align-items: center;
-    flex-grow: 1;
-    gap: 10px;
+    gap: 8px; /* Espacio entre los elementos */
+    flex-shrink: 0; /* Es fundamental que no se encoja */
 }
 
-.input-icon-left, .input-icon-right {
+.input-icon-left {
     color: var(--secondary-text);
     font-size: 1.5rem;
     cursor: pointer;
+    z-index: 10;
 }
 
 .input-main-area {
     display: flex;
     align-items: center;
     flex-grow: 1;
-    background-color: var(--received-message-bg);
+    background-color: var(--received-message-bg); /* Fondo del input */
     border-radius: 22px;
     padding: 0 8px;
     gap: 5px;
@@ -377,6 +381,7 @@ body {
     padding: 10px 0; 
     font-size: 1rem;
     outline: none;
+    /* Elimina el margen derecho que tenías duplicado */
 }
 /* Ocultar los inputs de tipo file */
 #file-input, #camera-input {
@@ -398,121 +403,53 @@ body {
     align-items: center;
     transition: none;
     box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-}
-
-/* ... (El CSS Global, Header, Messages, Quotes, Actions y Reactions se mantienen igual) ... */
-
-
-/* ----------------------------------------------------------
-    INPUT
----------------------------------------------------------- */
-.chat-input-form {
-    padding: 10px 15px;
-    background-color: var(--secondary-bg);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    /* Necesario para posicionar el selector de emojis */
-    position: relative; 
-}
-
-#message-form {
-    display: flex;
-    align-items: center;
-    flex-grow: 1;
-    gap: 10px;
-}
-
-.input-icon-left {
-    color: var(--secondary-text);
-    font-size: 1.5rem;
-    cursor: pointer;
-    z-index: 10; /* Asegura que el botón esté sobre otros elementos */
-}
-
-/* Solo queda el input principal */
-.input-main-area {
-    display: flex;
-    align-items: center;
-    flex-grow: 1;
-    background-color: var(--received-message-bg);
-    border-radius: 22px;
-    padding: 0 8px;
-    gap: 5px;
-}
-
-#message-input {
-    flex-grow: 1;
-    background-color: transparent; 
-    color: var(--primary-text);
-    border: none;
-    padding: 10px 0; 
-    font-size: 1rem;
-    outline: none;
+    flex-shrink: 0; /* Evita que el botón se encoja */
 }
 
 /* Estilos para el Selector de Emojis */
 #emoji-picker-container {
     position: absolute;
-    bottom: 60px; /* Sobre la barra de entrada */
+    bottom: 60px; /* Sobre la barra de entrada (44px de botón + padding) */
     left: 10px;
     z-index: 1000;
-    /* Oculto por defecto */
     display: none; 
 }
-/* Estilo del componente de emojis para modo oscuro */
 emoji-picker {
     --emoji-picker-height: 350px;
     --emoji-picker-width: 300px;
-    --background-color: #202c33; /* Fondo de burbuja recibida */
+    --background-color: #202c33; 
     --text-color: var(--primary-text);
-    --input-background-color: #0b141a; /* Fondo principal */
+    --input-background-color: #0b141a; 
     --border-color: #262c32;
     --icon-color: var(--secondary-text);
 }
 
-/* Botón de Micrófono/Enviar (Se mantiene igual) */
-#message-form button {
-    background-color: var(--accent-color);
-    color: white;
-    border: none;
-    border-radius: 50%;
-    width: 44px;
-    height: 44px;
-    font-size: 1.2rem;
-    cursor: pointer;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    transition: none;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-}
 
 /* ----------------------------------------------------------
     MEDIA QUERIES (OPTIMIZACIÓN MÓVIL FINAL)
-    Asegura que los estilos para pantallas pequeñas se aplican
 ---------------------------------------------------------- */
 @media (max-width: 600px) {
     
-    /* Contenedor principal: Ocupa toda la pantalla del móvil */
     .chat-container {
         width: 100vw; 
         height: 100vh;
         border-radius: 0; 
     }
 
-    /* Header: Ajuste de padding */
     .chat-header {
         padding: 10px 15px;
     }
 
-    /* Mensajes: Ajuste de ancho y padding */
-    .message { 
-        max-width: 90%; /* Aumentamos el ancho máximo de la burbuja */
-        margin-bottom: 25px; /* Mantiene espacio para la reacción debajo */
-    }
+    /* Ajuste de padding del área de mensajes */
     .chat-messages { 
-        padding: 6px 4%; /* Reduce el padding horizontal del área de chat */
+        padding: 6px 4%; 
+        /* ⚠️ Asegura el padding inferior para que el input fijo no tape el último mensaje */
+        padding-bottom: 80px; 
+    }
+
+    .message { 
+        max-width: 90%; 
+        margin-bottom: 25px; 
     }
     
     /* Ocultar acciones de hover (No funcionan bien en táctil) */
@@ -520,17 +457,9 @@ emoji-picker {
         display: none !important; 
     }
     
-    /* Reacciones (Aseguramos posición debajo del mensaje) */
-    .message.sent .reactions { 
-        right: 0; /* Alineada al final del mensaje enviado */
-    }
-    .message.received .reactions { 
-        left: 0; /* Alineada al inicio del mensaje recibido */
-    }
-
-    /* Input: Se mantiene compacto */
-    .chat-input-form { 
-        padding: 8px 10px; 
+    /* Input Fijo: Ajuste de tamaño y padding para pantalla pequeña */
+    #message-form {
+        padding: 8px 10px;
     }
     #message-form button {
         width: 40px;
