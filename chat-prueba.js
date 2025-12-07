@@ -28,8 +28,10 @@ const firebaseConfig = {
 // Inicializar Firebase
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
-const messagesRef = ref(database, 'messages');
-const lastActivityRef = ref(database, 'lastActivity');
+
+// 🚨 CAMBIO AQUÍ: Usando rutas de prueba para la base de datos
+const messagesRef = ref(database, 'messages-test');
+const lastActivityRef = ref(database, 'lastActivity-test');
 const MAX_MESSAGES = 20; // Límite de mensajes
 const INACTIVITY_LIMIT_MS = 24 * 60 * 60 * 1000; // 24 horas
 
@@ -51,6 +53,7 @@ let replyTo = null;
 // --- 2. GESTIÓN DE AUTENTICACIÓN Y MANTENIMIENTO ---
 
 if (!currentUser) {
+    // Si el usuario no está logueado, lo enviamos al login (asumiendo que login.html existe)
     window.location.href = 'login.html'; 
 } else {
     document.getElementById('username-display').textContent = currentUser;
@@ -77,7 +80,7 @@ const checkChatActivity = () => {
             if (now - lastActivityTimestamp > INACTIVITY_LIMIT_MS) {
                 remove(messagesRef);
                 remove(lastActivityRef);
-                console.log("Chat limpiado por inactividad de 24 horas.");
+                console.log("Chat de PRUEBA limpiado por inactividad de 24 horas.");
             }
         }
     });
@@ -111,7 +114,7 @@ function trimMessages() {
                     remove(children[i].ref);
                 }
             }
-            console.log(`Eliminados ${itemsToDelete} mensajes antiguos.`);
+            console.log(`Eliminados ${itemsToDelete} mensajes antiguos del chat de PRUEBA.`);
         }
     }).catch(error => console.error("Error al obtener snapshot para trimMessages:", error));
 }
@@ -207,7 +210,7 @@ onChildAdded(messagesRef, (snapshot) => {
     // MARCAR COMO VISTO
     if (message.sender !== currentUser && !message.read) {
          setTimeout(() => {
-             set(ref(database, `messages/${messageId}/read`), true);
+             set(ref(database, `messages-test/${messageId}/read`), true); // 🚨 CAMBIO DE RUTA
          }, 1000); 
     }
     
@@ -278,7 +281,6 @@ function displayMessage(messageId, message) {
         const quoteUser = document.createElement('strong');
         quoteUser.textContent = message.replyTo.sender;
         const quoteText = document.createElement('p');
-        // Mostrar solo un fragmento del texto de la respuesta
         quoteText.textContent = message.replyTo.text.length > 50 ? message.replyTo.text.substring(0, 50) + '...' : message.replyTo.text;
         quoteDiv.appendChild(quoteUser);
         quoteDiv.appendChild(quoteText);
@@ -422,7 +424,8 @@ function addReactions(container, messageId, reactions) {
 }
 
 function toggleReaction(messageId, emoji) {
-    const reactionRef = ref(database, `messages/${messageId}/reactions/${currentUser}`);
+    // 🚨 CAMBIO DE RUTA
+    const reactionRef = ref(database, `messages-test/${messageId}/reactions/${currentUser}`);
     get(reactionRef).then(snapshot => {
         if (snapshot.exists() && snapshot.val() === emoji) {
             remove(reactionRef); 
@@ -441,31 +444,41 @@ function toggleReaction(messageId, emoji) {
  */
 function setupTouchAction(messageWrapper, actionsDiv) {
     
+    // Bandera para evitar que touchstart y click se disparen a la vez en móvil
     let touchExecuted = false; 
 
     const handleAction = (e) => {
+        // Evita que los clics en los botones de acción cierren el menú inmediatamente.
         if (e.target.closest('.message-actions')) {
             return;
         }
 
+        // Cierra todas las demás acciones antes de abrir la actual
         closeAllMessageActions(actionsDiv);
         
+        // Alterna la visibilidad de las acciones de este mensaje
         actionsDiv.classList.toggle('active-touch');
         e.stopPropagation(); 
     };
 
     // 1. Manejar el toque inicial (touchstart) - Preferido para móviles
     messageWrapper.addEventListener('touchstart', (e) => {
+        // Evita que el toque se propague a elementos superiores que puedan cerrar el menú
+        e.stopPropagation(); 
+        
+        // Marcamos que se ha ejecutado un evento táctil
         touchExecuted = true;
-        setTimeout(() => {
-            handleAction(e);
-        }, 100); 
+        
+        // Ejecutamos la acción sin un retardo grande (para evitar la sensación de "pulsación larga")
+        handleAction(e);
+
     }, { passive: true });
     
     // 2. Manejar el clic (fallback para PC)
     messageWrapper.addEventListener('click', (e) => {
+        // Si ya se ejecutó un touchstart, ignoramos el evento click
         if (touchExecuted) {
-            touchExecuted = false; 
+            touchExecuted = false; // Reset para el siguiente toque
             return;
         }
         handleAction(e);
@@ -474,7 +487,7 @@ function setupTouchAction(messageWrapper, actionsDiv) {
 
     // 3. Listener global para cerrar las acciones abiertas cuando se toca/clica fuera
     document.addEventListener('click', (e) => {
-        if (!e.target.closest('.message') && !e.target.closest('.message-actions')) {
+        if (!e.target.closest('.message') && !e.target.closest('.message-actions') && !e.target.closest('#emoji-button')) {
              closeAllMessageActions();
         }
     });
@@ -492,6 +505,7 @@ function closeAllMessageActions(excludeActionsDiv = null) {
         if (actionsDiv !== excludeActionsDiv) {
             actionsDiv.classList.remove('active-touch');
             
+            // Cierra selectores de reacción que puedan estar flotando dentro de las acciones
             const reactionSelector = actionsDiv.querySelector('.reaction-selector');
             if (reactionSelector) {
                 reactionSelector.style.display = 'none';
@@ -499,4 +513,3 @@ function closeAllMessageActions(excludeActionsDiv = null) {
         }
     });
 }
-

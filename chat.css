@@ -1,490 +1,675 @@
 /* ----------------------------------------------------------
-    FONTS & ROOT (MODO OSCURO WHATSAPP)
+    IMPORTACIONES Y VARIABLES MODERNAS
 ---------------------------------------------------------- */
-@import url('https://fonts.googleapis.com/css2?family=Roboto:wght@400;500;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
 :root {
-    /* Colores base para el modo oscuro de WhatsApp */
-    --primary-bg: #131d25; /* Fondo general del chat (patrón) */
-    --secondary-bg: #0b141a; /* Fondo del chat-container/panel */
-    --primary-text: #e9edef; /* Texto blanco/claro */
-    --secondary-text: #8696a0; /* Texto secundario/hora/iconos */
-    --accent-color: #00a884; /* El verde de WhatsApp para acentos */
-
-    /* Burbujas de mensaje */
-    --sent-message-bg: #005c4b; /* Verde oscuro para mensajes enviados */
-    --received-message-bg: #202c33; /* Gris oscuro para mensajes recibidos */
+    /* Paleta moderna con gradientes */
+    --bg-primary: #0a0e27;
+    --bg-secondary: #141b2d;
+    --bg-card: #1a2332;
+    --accent-primary: #6366f1;
+    --accent-secondary: #8b5cf6;
+    --accent-gradient: linear-gradient(135deg, #6366f1 0%, #8b5cf6 100%);
     
-    /* Otros */
-    --border-color: #262c32; 
-    --hover-color: #1c2730; 
-    --shadow-light: rgba(0,0,0,0.2);
-    --shadow-medium: rgba(0,0,0,0.4);
-    --transition: 0.25s ease;
+    /* Colores de texto */
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    
+    /* Mensajes */
+    --message-sent: linear-gradient(135deg, #6366f1 0%, #7c3aed 100%);
+    --message-received: #1e293b;
+    
+    /* Efectos */
+    --border-radius: 16px;
+    --border-color: rgba(148, 163, 184, 0.1);
+    --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.4);
+    --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+    --glow: 0 0 20px rgba(99, 102, 241, 0.3);
+    
+    /* Transiciones suaves */
+    --transition-fast: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* ----------------------------------------------------------
-    GLOBAL Y PANTALLA COMPLETA
+    RESET Y BASE GLOBAL
 ---------------------------------------------------------- */
-body, html {
-    font-family: 'Roboto', sans-serif;
+* {
     margin: 0;
     padding: 0;
-    background-color: var(--secondary-bg); 
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    /* FORZAR PANTALLA COMPLETA EN MÓVILES */
-    height: 100vh;
-    width: 100vw; 
-    overflow: hidden; /* Controlamos el scroll solo dentro de chat-messages */
-    color: var(--primary-text);
+    box-sizing: border-box;
 }
 
-/* Scrollbar para el modo oscuro */
-::-webkit-scrollbar { width: 8px; }
-::-webkit-scrollbar-track { background: #1c2730; border-radius: 4px; }
-::-webkit-scrollbar-thumb { background: #54656f; border-radius: 4px; }
-::-webkit-scrollbar-thumb:hover { background: #6e828d; }
+body, html {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Scrollbar moderna */
+::-webkit-scrollbar {
+    width: 6px;
+}
+
+::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--text-muted);
+    border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--text-secondary);
+}
 
 /* ----------------------------------------------------------
-    CHAT CONTAINER (Ajustado a 100% del viewport)
+    CONTENEDOR PRINCIPAL
 ---------------------------------------------------------- */
 .chat-container {
-    width: 100vw; 
+    width: 100vw;
     height: 100vh;
-    max-width: none; 
-    background-color: var(--secondary-bg);
-    border-radius: 0; 
-    box-shadow: none; 
     display: flex;
     flex-direction: column;
-    overflow: hidden;
+    background: var(--bg-primary);
+    position: relative;
 }
 
 /* ----------------------------------------------------------
-    HEADER
+    HEADER CON GLASSMORPHISM
 ---------------------------------------------------------- */
 .chat-header {
-    background: var(--secondary-bg);
-    padding: 10px 24px;
+    background: rgba(26, 35, 50, 0.8);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border-color);
+    padding: 16px 24px;
     display: flex;
     justify-content: space-between;
     align-items: center;
-    border-bottom: 1px solid var(--border-color);
-    flex-shrink: 0; /* Asegura que no se reduzca */
+    z-index: 100;
+    box-shadow: var(--shadow-sm);
 }
+
 .contact-info {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 12px;
 }
+
 .contact-avatar {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    background-color: #54656f;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    background: var(--accent-gradient);
+    box-shadow: var(--glow);
 }
+
 .chat-header h1 {
-    margin: 0;
     font-size: 1.1rem;
-    font-weight: 500;
+    font-weight: 600;
+    color: var(--text-primary);
+    letter-spacing: -0.02em;
 }
+
 .header-actions {
     display: flex;
-    gap: 10px;
+    gap: 8px;
 }
+
 .header-actions button {
-    background: transparent;
-    color: var(--secondary-text);
-    border: none;
-    padding: 7px;
-    border-radius: 8px;
-    cursor: pointer;
-    transition: var(--transition);
-}
-#logout-button {
+    background: var(--bg-card);
+    color: var(--text-secondary);
     border: 1px solid var(--border-color);
-    padding: 7px 14px;
-}
-.header-actions button:hover {
-    background: var(--hover-color);
-}
-
-
-/* ----------------------------------------------------------
-    MESSAGES AREA
----------------------------------------------------------- */
-.chat-messages {
-    flex-grow: 1;
-    padding: 6px 9%; 
-    overflow-y: auto;
-    display: flex;
-    flex-direction: column;
-    background-image: url('https://user-images.githubusercontent.com/15075759/28719144-86dc0f70-73b1-11e7-911d-60d70fcded21.png');
-    background-size: 350px; 
-    background-color: var(--primary-bg); 
-    gap: 10px; 
-    
-    /* ⚠️ CLAVE PARA MÓVILES: Deja espacio para la barra de entrada Fija */
-    padding-bottom: 80px; 
-}
-
-.message { 
-    max-width: 65%; 
-    position: relative; 
-    margin-top: 10px; 
-    min-height: 40px; 
+    padding: 8px 16px;
+    border-radius: 10px;
     cursor: pointer;
-    /* Espacio extra en la parte inferior para la burbuja de reacción */
-    margin-bottom: 25px; 
-}
-
-/* Burbujas */
-.message-content {
-    padding: 6px 9px 8px 9px;
-    border-radius: 8px; 
-    box-shadow: 0 1px 0.5px var(--shadow-light); 
-    word-wrap: break-word;
-    position: relative; 
-    padding-right: 50px; 
-}
-
-.message.sent { align-self: flex-end; }
-.message.sent .message-content { background-color: var(--sent-message-bg); border-top-right-radius: 0; }
-.message.sent .message-content::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    right: -8px;
-    border-width: 6px 6px 6px 0;
-    border-style: solid;
-    border-color: transparent var(--sent-message-bg) transparent transparent;
-}
-
-.message.received { align-self: flex-start; }
-.message.received .message-content { background-color: var(--received-message-bg); border-top-left-radius: 0; }
-.message.received .message-content::before {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: -8px;
-    border-width: 6px 0 6px 6px;
-    border-style: solid;
-    border-color: transparent transparent transparent var(--received-message-bg);
-}
-
-/* Sender (Visible solo en mensajes recibidos) */
-.message-sender {
-    font-weight: 600;
-    font-size: 0.8rem;
-    color: var(--accent-color);
-    margin-bottom: 5px;
-}
-
-/* Timestamp y checkmarks */
-.message-timestamp {
-    font-size: 0.65rem;
-    color: var(--secondary-text);
-    position: absolute;
-    bottom: 5px;
-    right: 8px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all var(--transition-fast);
     display: flex;
     align-items: center;
-    gap: 3px;
+    gap: 6px;
 }
 
-/* Iconos de checkmark */
-.checkmark {
-    font-size: 0.8rem;
-    color: var(--secondary-text); /* Gris por defecto (entregado) */
-    transition: color 0.2s ease;
-}
-/* Estilo para VISTO (Doble Check Azul) */
-.checkmark.read {
-    color: #53bdeb; /* Azul de doble checkmark de WhatsApp */
+.header-actions button:hover {
+    background: var(--accent-primary);
+    color: white;
+    border-color: var(--accent-primary);
+    transform: translateY(-1px);
 }
 
-.message-body p { margin: 0; line-height: 1.35; }
+#logout-button {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #f87171;
+}
 
+#logout-button:hover {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: white;
+}
 
 /* ----------------------------------------------------------
-    QUOTE (REPLY)
+    ÁREA DE MENSAJES
+---------------------------------------------------------- */
+.chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+    padding: 24px 6%;
+    padding-bottom: 140px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    background: var(--bg-primary);
+    position: relative;
+}
+
+/* Efecto de gradiente sutil en el fondo */
+.chat-messages::before {
+    content: '';
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: radial-gradient(circle at 20% 50%, rgba(99, 102, 241, 0.05) 0%, transparent 50%),
+                radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
+    pointer-events: none;
+    z-index: 0;
+}
+
+/* ----------------------------------------------------------
+    BURBUJAS DE MENSAJE MODERNAS
+---------------------------------------------------------- */
+.message {
+    max-width: 70%;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 1;
+    animation: messageSlideIn 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes messageSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.message.sent {
+    align-self: flex-end;
+}
+
+.message.received {
+    align-self: flex-start;
+}
+
+.message-content {
+    padding: 12px 16px;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow-md);
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    word-wrap: break-word;
+    word-break: break-word;
+    overflow-wrap: break-word;
+}
+
+.message.sent .message-content {
+    background: var(--message-sent);
+    border-bottom-right-radius: 4px;
+}
+
+.message.received .message-content {
+    background: var(--message-received);
+    border-bottom-left-radius: 4px;
+}
+
+.message-sender {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--accent-primary);
+    margin-bottom: 4px;
+}
+
+.message-body {
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+
+.message-body p {
+    margin: 0;
+}
+
+.message-timestamp {
+    font-size: 0.7rem;
+    color: rgba(241, 245, 249, 0.6);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    align-self: flex-end;
+}
+
+.checkmark {
+    font-size: 0.75rem;
+    color: rgba(241, 245, 249, 0.6);
+    transition: color var(--transition-fast);
+}
+
+.checkmark.read {
+    color: #60a5fa;
+}
+
+/* ----------------------------------------------------------
+    REPLY QUOTE
 ---------------------------------------------------------- */
 .reply-quote {
-    background-color: rgba(255, 255, 255, 0.05);
-    border-left: 4px solid var(--accent-color);
-    padding: 7px;
-    margin-bottom: 5px;
-    border-radius: 4px;
-    opacity: 1;
+    background: rgba(255, 255, 255, 0.08);
+    border-left: 3px solid var(--accent-primary);
+    padding: 8px 12px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+}
+
+.reply-quote strong {
+    color: var(--accent-primary);
+    font-size: 0.85rem;
 }
 
 .reply-quote p {
-    margin: 0;
-    font-size: 0.8rem;
-    color: var(--secondary-text);
-}
-.reply-quote strong {
-    font-weight: 500;
-    color: var(--accent-color);
-    font-size: 0.8rem;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    margin-top: 4px;
 }
 
 /* ----------------------------------------------------------
-    MESSAGE ACTIONS (MOSTRAR EN HOVER)
+    ACCIONES DE MENSAJE (HOVER)
 ---------------------------------------------------------- */
 .message-actions {
-    display: flex; 
     position: absolute;
-    top: -15px; 
-    opacity: 0; 
-    transition: opacity var(--transition), transform var(--transition);
-    background-color: var(--secondary-bg);
-    border-radius: 15px;
-    padding: 3px 6px;
-    box-shadow: 0 1px 5px var(--shadow-medium);
-    z-index: 10;
-    gap: 5px;
+    top: 50%;
+    transform: translateY(-50%);
+    display: flex;
+    gap: 4px;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity var(--transition-fast);
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    padding: 6px;
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-color);
 }
 
 .message:hover .message-actions {
-    opacity: 1; 
+    opacity: 1;
+    pointer-events: all;
 }
+
 .message.sent .message-actions {
-    left: -75px; 
+    right: calc(100% + 12px);
 }
+
 .message.received .message-actions {
-    right: -75px; 
+    left: calc(100% + 12px);
 }
 
 .message-actions button {
     background: transparent;
     border: none;
-    padding: 5px;
-    border-radius: 50%;
+    color: var(--text-secondary);
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
     cursor: pointer;
-    color: var(--secondary-text);
-    font-size: 1rem;
-    transition: var(--transition);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
 }
+
 .message-actions button:hover {
-    color: var(--accent-color);
+    background: var(--accent-primary);
+    color: white;
     transform: scale(1.1);
 }
 
-/* ----------------------------------------------------------
-    REACTIONS
----------------------------------------------------------- */
-.reactions {
-    display: flex; 
-    position: absolute; 
-    bottom: -20px; 
-    z-index: 5;
-    background-color: var(--secondary-bg); 
+/* Selector de reacciones */
+.reaction-selector {
+    position: absolute;
+    top: -50px;
+    left: 0;
+    background: var(--bg-card);
+    backdrop-filter: blur(10px);
+    padding: 8px;
     border-radius: 12px;
-    padding: 3px 6px; 
-    font-size: 0.8rem;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.2);
-    border: 1px solid var(--border-color); 
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-color);
+    display: flex;
+    gap: 4px;
+    z-index: 1000;
 }
 
-.message.sent .reactions { 
-    right: 0; 
+.reaction-option {
+    background: transparent;
+    border: none;
+    font-size: 1.2rem;
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
 }
-.message.received .reactions { 
-    left: 0; 
+
+.reaction-option:hover {
+    background: rgba(99, 102, 241, 0.2);
+    transform: scale(1.2);
+}
+
+/* ----------------------------------------------------------
+    REACCIONES
+---------------------------------------------------------- */
+.reactions {
+    display: flex;
+    gap: 4px;
+    margin-top: 6px;
+    flex-wrap: wrap;
 }
 
 .reaction {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    padding: 4px 8px;
+    border-radius: 12px;
+    font-size: 0.85rem;
     cursor: pointer;
-    padding: 2px;
-    transition: var(--transition);
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+}
+
+.reaction:hover {
+    background: var(--accent-primary);
+    border-color: var(--accent-primary);
+    transform: scale(1.05);
 }
 
 /* ----------------------------------------------------------
     REPLY PREVIEW
 ---------------------------------------------------------- */
 .reply-preview {
-    display: none; /* Se mostrará con JS */
-    background-color: #202c33;
-    border-left: 4px solid var(--accent-color);
-    padding: 10px 16px;
-    margin: 0 15px 12px 15px; 
+    background: var(--bg-card);
+    border-left: 3px solid var(--accent-primary);
+    padding: 12px 20px;
+    display: none;
     justify-content: space-between;
     align-items: center;
-    border-radius: 8px;
-    flex-shrink: 0; /* Asegura que no se encoja */
+    border-top: 1px solid var(--border-color);
+    animation: slideDown 0.2s ease;
 }
-.reply-preview .reply-content p, 
-.reply-preview .reply-content strong {
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.reply-preview .reply-content {
+    flex: 1;
+    overflow: hidden;
+}
+
+.reply-preview .reply-content p {
     margin: 0;
+    color: var(--text-secondary);
     font-size: 0.9rem;
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    white-space: nowrap;
 }
+
+.reply-preview .reply-content strong {
+    color: var(--accent-primary);
+}
+
 .cancel-reply {
     background: transparent;
     border: none;
+    color: var(--text-secondary);
     cursor: pointer;
-    color: var(--secondary-text);
-    padding-left: 10px;
+    padding: 8px;
+    border-radius: 8px;
+    transition: all var(--transition-fast);
+}
+
+.cancel-reply:hover {
+    background: rgba(239, 68, 68, 0.1);
+    color: #f87171;
 }
 
 /* ----------------------------------------------------------
-    INPUT BAR (CORREGIDO Y UNIFICADO)
+    BARRA DE ENTRADA MODERNA
 ---------------------------------------------------------- */
-
-/* ⚠️ ELIMINAMOS .chat-input-form y usamos directamente #message-form para el posicionamiento fijo */
 #message-form {
-    /* ⚠️ CLAVE: Fija el formulario en la parte inferior de la pantalla */
-    position: fixed; 
+    position: fixed;
     bottom: 0;
     left: 0;
     right: 0;
-    
-    z-index: 1000; 
-    
-    padding: 8px 10px; /* Ajuste de padding para móviles */
-    background-color: var(--secondary-bg); /* Usamos el color de fondo del chat-container */
-    box-shadow: 0 -2px 5px var(--shadow-medium); /* Sombra hacia arriba */
-    
-    display: flex; 
+    padding: 16px 24px;
+    background: rgba(20, 27, 45, 0.95);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-top: 1px solid var(--border-color);
+    display: flex;
     align-items: center;
-    gap: 8px; /* Espacio entre los elementos */
-    flex-shrink: 0; /* Es fundamental que no se encoja */
+    gap: 12px;
+    z-index: 100;
+    box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.3);
 }
 
-.input-icon-left {
-    color: var(--secondary-text);
-    font-size: 1.5rem;
+.input-icon {
+    color: var(--text-secondary);
+    font-size: 1.4rem;
     cursor: pointer;
-    z-index: 10;
+    padding: 10px;
+    border-radius: 10px;
+    transition: all var(--transition-fast);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.input-icon:hover {
+    color: var(--accent-primary);
+    background: rgba(99, 102, 241, 0.1);
 }
 
 .input-main-area {
+    flex: 1;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 14px;
+    padding: 0 16px;
     display: flex;
     align-items: center;
-    flex-grow: 1;
-    background-color: var(--received-message-bg); /* Fondo del input */
-    border-radius: 22px;
-    padding: 0 8px;
-    gap: 5px;
+    gap: 8px;
+    transition: all var(--transition-fast);
+}
+
+.input-main-area:focus-within {
+    border-color: var(--accent-primary);
+    box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.1);
 }
 
 #message-input {
-    flex-grow: 1;
-    background-color: transparent; 
-    color: var(--primary-text);
+    flex: 1;
+    background: transparent;
     border: none;
-    padding: 10px 0; 
-    font-size: 1rem;
+    color: var(--text-primary);
+    font-size: 0.95rem;
+    padding: 12px 0;
     outline: none;
-    /* Elimina el margen derecho que tenías duplicado */
-}
-/* Ocultar los inputs de tipo file */
-#file-input, #camera-input {
-    display: none;
+    font-family: inherit;
 }
 
-/* Botón de Micrófono/Enviar */
-#message-form button {
-    background-color: var(--accent-color);
-    color: white;
+#message-input::placeholder {
+    color: var(--text-muted);
+}
+
+#message-form button[type="submit"] {
+    background: var(--accent-gradient);
     border: none;
-    border-radius: 50%;
-    width: 44px;
-    height: 44px;
-    font-size: 1.2rem;
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
     cursor: pointer;
     display: flex;
-    justify-content: center;
     align-items: center;
-    transition: none;
-    box-shadow: 0 1px 3px rgba(0,0,0,0.15);
-    flex-shrink: 0; /* Evita que el botón se encoja */
+    justify-content: center;
+    box-shadow: var(--glow);
+    transition: all var(--transition-fast);
+    color: white;
 }
 
-/* Estilos para el Selector de Emojis */
-#emoji-picker-container {
-    position: absolute;
-    bottom: 60px; /* Sobre la barra de entrada (44px de botón + padding) */
-    left: 10px;
-    z-index: 1000;
-    display: none; 
-}
-emoji-picker {
-    --emoji-picker-height: 350px;
-    --emoji-picker-width: 300px;
-    --background-color: #202c33; 
-    --text-color: var(--primary-text);
-    --input-background-color: #0b141a; 
-    --border-color: #262c32;
-    --icon-color: var(--secondary-text);
+#message-form button[type="submit"]:hover {
+    transform: scale(1.05);
+    box-shadow: 0 0 30px rgba(99, 102, 241, 0.5);
 }
 
+#message-form button[type="submit"]:active {
+    transform: scale(0.95);
+}
 
 /* ----------------------------------------------------------
-    MEDIA QUERIES (OPTIMIZACIÓN MÓVIL FINAL)
+    EMOJI PICKER
 ---------------------------------------------------------- */
-@media (max-width: 600px) {
-    
-    .chat-container {
-        width: 100vw; 
-        height: 100vh;
-        border-radius: 0; 
-    }
+#emoji-picker-container {
+    position: fixed;
+    bottom: 90px;
+    left: 24px;
+    z-index: 1000;
+    display: none;
+    animation: fadeIn 0.2s ease;
+}
 
-    .chat-header {
-        padding: 10px 15px;
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: scale(0.95);
     }
-
-    /* Ajuste de padding del área de mensajes */
-    .chat-messages { 
-        padding: 6px 4%; 
-        /* ⚠️ Asegura el padding inferior para que el input fijo no tape el último mensaje */
-        padding-bottom: 80px; 
+    to {
+        opacity: 1;
+        transform: scale(1);
     }
+}
 
-    .message { 
-        max-width: 90%; 
-        margin-bottom: 25px; 
+emoji-picker {
+    --background: var(--bg-card);
+    --border-color: var(--border-color);
+    --text-color: var(--text-primary);
+    --secondary-text-color: var(--text-secondary);
+    --category-button-color: var(--text-secondary);
+    --category-button-active-color: var(--accent-primary);
+    --search-background: var(--bg-secondary);
+    --emoji-size: 1.5rem;
+    border-radius: 16px;
+    box-shadow: var(--shadow-lg);
+    border: 1px solid var(--border-color);
+}
+
+/* ----------------------------------------------------------
+    RESPONSIVE DESIGN
+---------------------------------------------------------- */
+@media (max-width: 768px) {
+    .chat-messages {
+        padding: 16px 4%;
+        padding-bottom: 120px;
+        gap: 12px;
     }
     
-    /* Ocultar acciones de hover (No funcionan bien en táctil) */
-    .message-actions { 
-        display: none !important; 
+    .message {
+        max-width: 85%;
     }
     
-    /* Input Fijo: Ajuste de tamaño y padding para pantalla pequeña */
+    .message-actions {
+        display: none !important;
+    }
+    
+    .message.active-touch .message-actions {
+        display: flex !important;
+        position: fixed;
+        bottom: 100px;
+        left: 50%;
+        transform: translateX(-50%);
+        opacity: 1;
+        pointer-events: all;
+    }
+    
     #message-form {
-        padding: 8px 10px;
-    }
-    #message-form button {
-        width: 40px;
-        height: 40px;
+        padding: 12px 16px;
     }
     
-    /* Selector de Emojis: Más grande y mejor posicionado para el táctil */
+    .input-icon {
+        font-size: 1.2rem;
+        padding: 8px;
+    }
+    
+    #message-form button[type="submit"] {
+        width: 44px;
+        height: 44px;
+    }
+    
+    .header-actions button {
+        padding: 6px 12px;
+        font-size: 0.85rem;
+    }
+    
     emoji-picker {
-        --emoji-picker-width: 95vw;
+        --emoji-picker-width: 90vw;
         --emoji-picker-height: 50vh;
     }
     
     #emoji-picker-container {
-        left: 2.5vw; 
-        bottom: 60px;
+        left: 5vw;
     }
-}/* En tu styles.css */
-
-/* Oculta las acciones por defecto */
-.message-actions { 
-    display: none !important; /* Asegúrate de que están ocultas si no hay hover */
 }
 
-/* Muestra las acciones al hacer clic/tocar (usamos la misma clase que antes) */
+/* ----------------------------------------------------------
+    ESTADOS TOUCH/ACTIVE
+---------------------------------------------------------- */
 .message-actions.active-touch {
-    display: flex !important; 
     opacity: 1 !important;
+    pointer-events: all !important;
+    display: flex !important;
 }

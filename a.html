@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sigma Chat - Prueba</title>
+    <link rel="stylesheet" href="styles.css"> 
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js"></script>
+</head>
+<body>
+
+    <div class="chat-container">
+        <header>
+            <button id="home-button" class="icon-button"><i class="fas fa-home"></i></button>
+            <h1 id="username-display">Cargando usuario...</h1>
+            <button id="logout-button" class="icon-button"><i class="fas fa-sign-out-alt"></i></button>
+        </header>
+
+        <div id="chat-messages" class="chat-messages">
+            </div>
+
+        <div id="reply-preview" class="reply-preview" style="display: none;">
+            <div class="reply-content">
+                <strong>Respondiendo a: <span id="reply-user"></span></strong>
+                <p id="reply-text"></p>
+            </div>
+            <button id="cancel-reply" class="cancel-reply-button"><i class="fas fa-times"></i></button>
+        </div>
+
+        <form id="message-form" class="message-input-area">
+            <input type="text" id="message-input" placeholder="Escribe un mensaje..." required>
+            <div id="emoji-picker-container" class="emoji-picker-container"></div>
+            <button type="button" id="emoji-button" class="icon-button"><i class="far fa-smile"></i></button>
+            <button type="submit" id="send-button" class="icon-button primary"><i class="fas fa-paper-plane"></i></button>
+        </form>
+    </div>
+
+    <script type="module" src="chat-prueba.js"></script> 
+</body>
+</html>
