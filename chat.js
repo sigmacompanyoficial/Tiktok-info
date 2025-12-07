@@ -397,7 +397,7 @@ onChildAdded(messagesRef, (snapshot) => {
     
     const isScrolledToBottom = chatMessages.scrollHeight - chatMessages.clientHeight <= chatMessages.scrollTop + 1;
     
-    // CORRECCIÓN: Llama a la función de renderizado inmediatamente para mostrar el mensaje
+    // Llama a la función de renderizado inmediatamente para mostrar el mensaje
     renderAndAppendMessage(messageId, message);
 
     if (!message.timestamp) {
@@ -405,7 +405,7 @@ onChildAdded(messagesRef, (snapshot) => {
         setTimeout(() => {
             get(snapshot.ref).then(newSnapshot => {
                 if (newSnapshot.exists()) {
-                    // El mensaje ya está en el DOM, esto solo asegura la consistencia de datos si es necesario.
+                    // El mensaje ya está en el DOM.
                 }
             });
         }, 500); 
@@ -443,7 +443,9 @@ onChildChanged(messagesRef, (snapshot) => {
         
         // 5. Reconfigurar las acciones
         const actionsDiv = newMessageWrapper.querySelector('.message-actions');
-        setupTouchAction(newMessageWrapper, actionsDiv);
+        if (actionsDiv) {
+             setupTouchAction(newMessageWrapper, actionsDiv);
+        }
     }
 });
 
@@ -482,7 +484,18 @@ function getTimeAgo(timestamp) {
 }
 
 function updateSeenIndicator(messageElement, readAt, messageId) {
-    if (!readAt) return;
+    if (!readAt) {
+        // Asegurar que se elimina el indicador si readAt es null/false
+        const existingSeenIndicator = messageElement.querySelector('.seen-indicator');
+        if (existingSeenIndicator) {
+             existingSeenIndicator.remove();
+        }
+        if (seenIntervals[messageId]) {
+            clearInterval(seenIntervals[messageId]);
+            delete seenIntervals[messageId];
+        }
+        return;
+    }
     
     let seenIndicator = messageElement.querySelector('.seen-indicator');
     
@@ -491,13 +504,20 @@ function updateSeenIndicator(messageElement, readAt, messageId) {
         seenIndicator.className = 'seen-indicator';
         messageElement.appendChild(seenIndicator);
         
-        // Actualizar cada minuto
+        // Si ya hay un intervalo, lo limpiamos antes de crear uno nuevo.
         if (seenIntervals[messageId]) {
             clearInterval(seenIntervals[messageId]);
         }
+        
+        // Actualizar cada minuto
         seenIntervals[messageId] = setInterval(() => {
-            if (document.getElementById(messageId)) {
-                seenIndicator.innerHTML = `<i class="fas fa-eye"></i> Visto ${getTimeAgo(readAt)}`;
+            const currentElement = document.getElementById(messageId);
+            if (currentElement) {
+                // Re-obtener el indicador por si fue recreado o movido
+                const indicator = currentElement.querySelector('.seen-indicator');
+                if (indicator) {
+                    indicator.innerHTML = `<i class="fas fa-eye"></i> Visto ${getTimeAgo(readAt)}`;
+                }
             } else {
                 clearInterval(seenIntervals[messageId]);
                 delete seenIntervals[messageId];
