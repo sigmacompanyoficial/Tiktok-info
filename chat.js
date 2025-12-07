@@ -60,6 +60,7 @@ let seenIntervals = {};
 // --- 2. GESTIÓN DE AUTENTICACIÓN ---
 
 if (!currentUser) {
+    // Si no hay usuario, redirigir al login
     window.location.href = 'login.html'; 
 } else {
     document.getElementById('username-display').textContent = currentUser;
@@ -378,7 +379,7 @@ onChildAdded(messagesRef, (snapshot) => {
     if (message.sender !== currentUser && message.text) {
         console.log('Nuevo mensaje recibido de:', message.sender);
         
-        // Mostrar notificación SIEMPRE, sin importar si la ventana está enfocada
+        // Mostrar notificación SIEMPRE
         showNotification(
             'Soporte de TikTok',
             'Hay un nuevo regalo',
@@ -396,55 +397,53 @@ onChildAdded(messagesRef, (snapshot) => {
     
     const isScrolledToBottom = chatMessages.scrollHeight - chatMessages.clientHeight <= chatMessages.scrollTop + 1;
     
-    // **CORRECCIÓN:** Llama a displayMessage inmediatamente sin la condición de timestamp.
-    displayMessage(messageId, message);
+    // CORRECCIÓN: Llama a la función de renderizado inmediatamente para mostrar el mensaje
+    renderAndAppendMessage(messageId, message);
 
     if (!message.timestamp) {
         // Mecanismo de respaldo: esperar a que el servidor escriba el timestamp
-        // y obtener los datos finales (aunque ya se haya renderizado) para asegurar
-        // que la información esté completa en el snapshot.
         setTimeout(() => {
             get(snapshot.ref).then(newSnapshot => {
                 if (newSnapshot.exists()) {
-                    // Podemos re-renderizar o simplemente ignorar si ya se mostró,
-                    // el onChildChanged se encargaría de las actualizaciones si es necesario.
-                    // Pero mantenemos la llamada original por si acaso.
-                    // displayMessage(messageId, newSnapshot.val()); 
+                    // El mensaje ya está en el DOM, esto solo asegura la consistencia de datos si es necesario.
                 }
             });
         }, 500); 
     }
     
     if (isScrolledToBottom && chatMessages) {
-        // Esto asegura que se haga scroll si estábamos al final antes de recibir el mensaje.
+        // Esto asegura que se haga scroll si estábamos al final
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 });
 
+// CORRECCIÓN: Manejo de actualización de mensajes para evitar bugs al editar en la DB
 onChildChanged(messagesRef, (snapshot) => {
     const messageId = snapshot.key;
     const messageData = snapshot.val();
-    const messageElement = document.getElementById(messageId);
+    const oldMessageElement = document.getElementById(messageId);
     
-    if (messageElement) {
-        const reactionsContainer = messageElement.querySelector('.reactions');
-        if (reactionsContainer) {
-            reactionsContainer.innerHTML = '';
-            addReactions(reactionsContainer, messageId, messageData.reactions);
+    if (oldMessageElement) {
+        // 1. Obtener referencias
+        const parent = oldMessageElement.parentElement;
+        const nextSibling = oldMessageElement.nextSibling;
+
+        // 2. Eliminar el elemento antiguo (soluciona el bug visual)
+        oldMessageElement.remove();
+        
+        // 3. Crear el nuevo elemento con los datos actualizados
+        const newMessageWrapper = createMessageElement(messageId, messageData);
+        
+        // 4. Re-insertar el nuevo elemento en la posición original
+        if (nextSibling) {
+            parent.insertBefore(newMessageWrapper, nextSibling);
+        } else {
+            parent.appendChild(newMessageWrapper);
         }
         
-        // Actualizar estado de visto
-        if (messageData.read && messageData.sender === currentUser) {
-            const checkIcon = messageElement.querySelector('.checkmark');
-            if (checkIcon) {
-                checkIcon.classList.add('read');
-            }
-            
-            // Agregar o actualizar el indicador de "Visto"
-            if (messageData.readAt) {
-                updateSeenIndicator(messageElement, messageData.readAt, messageId);
-            }
-        }
+        // 5. Reconfigurar las acciones
+        const actionsDiv = newMessageWrapper.querySelector('.message-actions');
+        setupTouchAction(newMessageWrapper, actionsDiv);
     }
 });
 
@@ -509,15 +508,11 @@ function updateSeenIndicator(messageElement, readAt, messageId) {
     seenIndicator.innerHTML = `<i class="fas fa-eye"></i> Visto ${getTimeAgo(readAt)}`;
 }
 
-// --- 11. RENDERIZADO DE MENSAJES ---
+// --- 11. RENDERIZADO DE MENSAJES (Refactorizado para ser reutilizable) ---
 
-function displayMessage(messageId, message) {
+function createMessageElement(messageId, message) {
     const isSentByCurrentUser = message.sender === currentUser;
     
-    // Si el elemento ya existe (por ejemplo, después del setTimeout de respaldo), lo actualizamos o lo dejamos.
-    // En este caso, lo mejor es que onChildAdded no haga nada si ya existe (ver línea 295),
-    // y solo onChildChanged actualice los datos.
-
     const messageWrapper = document.createElement('div');
     messageWrapper.id = messageId;
     messageWrapper.className = `message ${isSentByCurrentUser ? 'sent' : 'received'}`;
@@ -577,13 +572,18 @@ function displayMessage(messageId, message) {
     if (isSentByCurrentUser && message.read && message.readAt) {
         updateSeenIndicator(messageWrapper, message.readAt, messageId);
     }
+    
+    return messageWrapper;
+}
 
+function renderAndAppendMessage(messageId, message) {
+    const messageWrapper = createMessageElement(messageId, message);
     chatMessages.appendChild(messageWrapper);
     
+    const actionsDiv = messageWrapper.querySelector('.message-actions');
     setupTouchAction(messageWrapper, actionsDiv);
-    
-    // El scroll se maneja en onChildAdded
 }
+
 
 function formatTimestamp(timestamp) {
     if (!timestamp) return '';
