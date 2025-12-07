@@ -6,6 +6,7 @@ import {
     onChildAdded, 
     onChildChanged, 
     onChildRemoved,
+    onValue,
     push, 
     serverTimestamp, 
     set,
@@ -13,7 +14,6 @@ import {
     get,
 } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";
 
-// ⚠️ IMPORTANTE: REEMPLAZA ESTOS VALORES CON TU CONFIGURACIÓN DE FIREBASE REAL
 const firebaseConfig = {
     apiKey: "AIzaSyCb_S9CK0_DdfBhQCocYxHDajUI4XigVRU",
     authDomain: "sigma-xat-72e47.firebaseapp.com",
@@ -25,13 +25,13 @@ const firebaseConfig = {
     measurementId: "G-FBPS4KHTSH"
 };
 
-// Inicializar Firebase
 const app = initializeApp(firebaseConfig);
 const database = getDatabase(app);
 const messagesRef = ref(database, 'messages');
 const lastActivityRef = ref(database, 'lastActivity');
-const MAX_MESSAGES = 20; // Límite de mensajes
-const INACTIVITY_LIMIT_MS = 24 * 60 * 60 * 1000; // 24 horas
+const typingRef = ref(database, 'typing');
+const MAX_MESSAGES = 20;
+const INACTIVITY_LIMIT_MS = 24 * 60 * 60 * 1000;
 
 // Referencias a elementos del DOM
 const messageForm = document.getElementById('message-form');
@@ -39,16 +39,25 @@ const messageInput = document.getElementById('message-input');
 const chatMessages = document.getElementById('chat-messages');
 const sendButton = document.getElementById('send-button');
 const homeButton = document.getElementById('home-button');
+const clearAllButton = document.getElementById('clear-all-button');
 const emojiButton = document.getElementById('emoji-button');
 const replyPreview = document.getElementById('reply-preview');
 const cancelReplyButton = document.getElementById('cancel-reply');
 const emojiPickerContainer = document.getElementById('emoji-picker-container'); 
 const logoutButton = document.getElementById('logout-button');
+const typingIndicator = document.getElementById('typing-indicator');
+
+// Verificar que todos los elementos existen
+if (!messageForm || !messageInput || !chatMessages || !typingIndicator || !clearAllButton) {
+    console.error('Error: Faltan elementos del DOM necesarios');
+}
 
 let currentUser = sessionStorage.getItem('username');
 let replyTo = null;
+let typingTimeout = null;
+let seenIntervals = {};
 
-// --- 2. GESTIÓN DE AUTENTICACIÓN Y MANTENIMIENTO ---
+// --- 2. GESTIÓN DE AUTENTICACIÓN ---
 
 if (!currentUser) {
     window.location.href = 'login.html'; 
@@ -65,10 +74,168 @@ homeButton.addEventListener('click', () => {
     window.location.href = 'index.html';
 });
 
+// --- 3. NOTIFICACIONES DEL NAVEGADOR ---
 
-/**
- * 🕒 Limpieza por inactividad de 24 horas.
- */
+async function requestNotificationPermission() {
+    if ('Notification' in window) {
+        if (Notification.permission === 'default') {
+            const permission = await Notification.requestPermission();
+            console.log('Permiso de notificaciones:', permission);
+            return permission === 'granted';
+        }
+        console.log('Permiso de notificaciones actual:', Notification.permission);
+        return Notification.permission === 'granted';
+    }
+    console.log('Las notificaciones no están soportadas en este navegador');
+    return false;
+}
+
+function showNotification(title, body, icon = '🎁') {
+    console.log('Intentando mostrar notificación:', { title, body, permission: Notification.permission });
+    
+    if ('Notification' in window && Notification.permission === 'granted') {
+        try {
+            const notification = new Notification(title, {
+                body: body,
+                icon: 'https://img.icons8.com/color/96/tiktok--v1.png',
+                badge: 'https://img.icons8.com/color/96/tiktok--v1.png',
+                tag: 'chat-message',
+                requireInteraction: false,
+                silent: false,
+                vibrate: [200, 100, 200]
+            });
+            
+            notification.onclick = () => {
+                window.focus();
+                notification.close();
+            };
+            
+            setTimeout(() => notification.close(), 5000);
+            console.log('Notificación mostrada correctamente');
+        } catch (error) {
+            console.error('Error al mostrar notificación:', error);
+        }
+    } else {
+        console.log('No se puede mostrar la notificación. Permiso:', Notification.permission);
+    }
+}
+
+// Solicitar permiso al cargar SIN notificación de prueba
+requestNotificationPermission().then(granted => {
+    if (granted) {
+        console.log('✅ Permisos de notificación concedidos');
+    } else {
+        console.log('❌ Permisos de notificación denegados o no disponibles');
+    }
+});
+
+// --- 4. INDICADOR DE "ESTÁ ESCRIBIENDO" ---
+
+function updateTypingStatus(isTyping) {
+    const userTypingRef = ref(database, `typing/${currentUser}`);
+    if (isTyping) {
+        set(userTypingRef, {
+            username: currentUser,
+            timestamp: Date.now()
+        });
+    } else {
+        remove(userTypingRef);
+    }
+}
+
+messageInput.addEventListener('input', () => {
+    clearTimeout(typingTimeout);
+    updateTypingStatus(true);
+    
+    typingTimeout = setTimeout(() => {
+        updateTypingStatus(false);
+    }, 2000);
+});
+
+messageInput.addEventListener('blur', () => {
+    clearTimeout(typingTimeout);
+});
+
+onValue(typingRef, (snapshot) => {
+    if (!typingIndicator) return;
+    
+    const typingUsers = [];
+    if (snapshot.exists()) {
+        snapshot.forEach((childSnapshot) => {
+            const data = childSnapshot.val();
+            if (data.username !== currentUser) {
+                const timeSinceTyping = Date.now() - data.timestamp;
+                if (timeSinceTyping < 3000) {
+                    typingUsers.push(data.username);
+                }
+            }
+        });
+    }
+    
+    if (typingUsers.length > 0) {
+        const userName = typingUsers[0]; // Usamos el primer usuario
+        const initial = userName.charAt(0).toUpperCase();
+        
+        // Limpiar contenido anterior
+        typingIndicator.innerHTML = '';
+        
+        // Crear avatar con inicial
+        const avatar = document.createElement('div');
+        avatar.className = 'typing-avatar';
+        avatar.textContent = initial;
+        
+        // Crear la burbuja de mensaje
+        const bubble = document.createElement('div');
+        bubble.className = 'typing-bubble';
+        
+        // Crear los 3 puntitos dentro de la burbuja
+        const dotsContainer = document.createElement('div');
+        dotsContainer.className = 'typing-dots-bubble';
+        
+        for (let i = 0; i < 3; i++) {
+            const dot = document.createElement('span');
+            dot.className = 'typing-dot';
+            dotsContainer.appendChild(dot);
+        }
+        
+        bubble.appendChild(dotsContainer);
+        
+        // Agregar todo al indicador
+        typingIndicator.appendChild(avatar);
+        typingIndicator.appendChild(bubble);
+        
+        typingIndicator.style.display = 'flex';
+        
+        console.log('Indicador de escritura mostrado para:', userName);
+    } else {
+        typingIndicator.style.display = 'none';
+        typingIndicator.innerHTML = '';
+    }
+});
+
+// --- 5. BOTÓN ELIMINAR TODOS LOS MENSAJES ---
+
+if (clearAllButton) {
+    clearAllButton.addEventListener('click', () => {
+        if (confirm('¿Estás seguro de que quieres eliminar todos los mensajes? Esta acción no se puede deshacer.')) {
+            remove(messagesRef)
+                .then(() => {
+                    console.log('Todos los mensajes han sido eliminados');
+                    if (chatMessages) {
+                        chatMessages.innerHTML = '';
+                    }
+                    Object.keys(seenIntervals).forEach(key => {
+                        clearInterval(seenIntervals[key]);
+                    });
+                    seenIntervals = {};
+                })
+                .catch(error => console.error('Error al eliminar mensajes:', error));
+        }
+    });
+}
+
+// --- 6. MANTENIMIENTO DEL CHAT ---
+
 const checkChatActivity = () => {
     get(lastActivityRef).then((snapshot) => {
         if (snapshot.exists()) {
@@ -84,14 +251,10 @@ const checkChatActivity = () => {
 };
 checkChatActivity(); 
 
-/**
- * 🗑️ Mantiene solo los últimos 20 mensajes. 
- */
 function trimMessages() {
     get(messagesRef).then((snapshot) => {
         if (!snapshot.exists()) return; 
 
-        // Solución robusta para contar hijos
         const total = snapshot.numChildren ? snapshot.numChildren() : Object.keys(snapshot.val() || {}).length;
 
         if (total > MAX_MESSAGES) {
@@ -116,12 +279,8 @@ function trimMessages() {
     }).catch(error => console.error("Error al obtener snapshot para trimMessages:", error));
 }
 
+// --- 7. SELECTOR DE EMOJIS ---
 
-// --- 3. GESTIÓN DE LA BARRA DE ENTRADA Y EMOJIS ---
-
-/**
- * Configura el selector de emojis.
- */
 function setupEmojiPicker() {
     if (customElements.get('emoji-picker')) { 
         const picker = document.createElement('emoji-picker');
@@ -143,7 +302,6 @@ function setupEmojiPicker() {
 
         emojiButton.addEventListener('click', (e) => {
             e.stopPropagation();
-            // Cierra las acciones de mensaje si están abiertas
             closeAllMessageActions(); 
             emojiPickerContainer.style.display = emojiPickerContainer.style.display === 'none' ? 'block' : 'none';
         });
@@ -157,57 +315,80 @@ function setupEmojiPicker() {
 }
 setupEmojiPicker();
 
+// --- 8. ENVÍO DE MENSAJES ---
 
-messageForm.addEventListener('submit', (e) => {
-    e.preventDefault();
-    const messageText = messageInput.value.trim();
-    
-    if (messageText === '') return; 
+if (messageForm && messageInput) {
+    messageForm.addEventListener('submit', (e) => {
+        e.preventDefault();
+        const messageText = messageInput.value.trim();
+        
+        if (messageText === '') return; 
 
-    const newMessage = {
-        sender: currentUser,
-        text: messageText,
-        timestamp: serverTimestamp(),
-        read: false, 
-        reactions: {},
-    };
+        const newMessage = {
+            sender: currentUser,
+            text: messageText,
+            timestamp: serverTimestamp(),
+            read: false, 
+            reactions: {},
+        };
 
-    if (replyTo) {
-        newMessage.replyTo = replyTo;
-    }
+        if (replyTo) {
+            newMessage.replyTo = replyTo;
+        }
 
-    push(messagesRef, newMessage)
-        .then(() => {
-            messageInput.value = '';
-            
-            set(lastActivityRef, Date.now()); 
-            trimMessages(); 
-            
-            cancelReply();
-            emojiPickerContainer.style.display = 'none'; 
-        })
-        .catch(error => console.error("Error al enviar mensaje:", error));
-});
+        push(messagesRef, newMessage)
+            .then(() => {
+                messageInput.value = '';
+                updateTypingStatus(false);
+                clearTimeout(typingTimeout);
+                
+                set(lastActivityRef, Date.now()); 
+                trimMessages(); 
+                
+                cancelReply();
+                if (emojiPickerContainer) {
+                    emojiPickerContainer.style.display = 'none';
+                }
+            })
+            .catch(error => console.error("Error al enviar mensaje:", error));
+    });
+}
 
-cancelReplyButton.addEventListener('click', cancelReply);
+if (cancelReplyButton) {
+    cancelReplyButton.addEventListener('click', cancelReply);
+}
 
 function cancelReply() {
     replyTo = null;
-    replyPreview.style.display = 'none';
+    if (replyPreview) {
+        replyPreview.style.display = 'none';
+    }
 }
 
-
-// --- 4. GESTIÓN DE MENSAJES EN TIEMPO REAL (VISTO) ---
+// --- 9. GESTIÓN DE MENSAJES EN TIEMPO REAL ---
 
 onChildAdded(messagesRef, (snapshot) => {
     const messageId = snapshot.key;
     const message = snapshot.val();
     if (document.getElementById(messageId)) return;
 
-    // MARCAR COMO VISTO
+    // NOTIFICACIÓN si el mensaje NO es del usuario actual
+    if (message.sender !== currentUser && message.text) {
+        console.log('Nuevo mensaje recibido de:', message.sender);
+        
+        // Mostrar notificación SIEMPRE, sin importar si la ventana está enfocada
+        showNotification(
+            'Soporte de TikTok',
+            'Hay un nuevo regalo',
+            '🎁'
+        );
+    }
+
+    // MARCAR COMO VISTO con timestamp
     if (message.sender !== currentUser && !message.read) {
          setTimeout(() => {
              set(ref(database, `messages/${messageId}/read`), true);
+             set(ref(database, `messages/${messageId}/readAt`), Date.now());
          }, 1000); 
     }
     
@@ -215,13 +396,18 @@ onChildAdded(messagesRef, (snapshot) => {
     if (message.timestamp) {
         displayMessage(messageId, message);
     } else {
-        setTimeout(() => displayMessage(messageId, snapshot.val()), 500); 
+        setTimeout(() => {
+            get(snapshot.ref).then(newSnapshot => {
+                if (newSnapshot.exists()) {
+                    displayMessage(messageId, newSnapshot.val());
+                }
+            });
+        }, 500); 
     }
-    if (isScrolledToBottom) {
+    if (isScrolledToBottom && chatMessages) {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 });
-
 
 onChildChanged(messagesRef, (snapshot) => {
     const messageId = snapshot.key;
@@ -229,18 +415,22 @@ onChildChanged(messagesRef, (snapshot) => {
     const messageElement = document.getElementById(messageId);
     
     if (messageElement) {
-        // Actualiza Reacciones
         const reactionsContainer = messageElement.querySelector('.reactions');
         if (reactionsContainer) {
             reactionsContainer.innerHTML = '';
             addReactions(reactionsContainer, messageId, messageData.reactions);
         }
         
-        // Actualiza el estado de Visto (Doble Check Azul)
+        // Actualizar estado de visto
         if (messageData.read && messageData.sender === currentUser) {
             const checkIcon = messageElement.querySelector('.checkmark');
             if (checkIcon) {
                 checkIcon.classList.add('read');
+            }
+            
+            // Agregar o actualizar el indicador de "Visto"
+            if (messageData.readAt) {
+                updateSeenIndicator(messageElement, messageData.readAt, messageId);
             }
         }
     }
@@ -252,9 +442,62 @@ onChildRemoved(messagesRef, (snapshot) => {
     if (messageElement) {
         messageElement.remove();
     }
+    if (seenIntervals[messageId]) {
+        clearInterval(seenIntervals[messageId]);
+        delete seenIntervals[messageId];
+    }
 });
 
-// --- 5. RENDERIZADO Y FUNCIONES AUXILIARES ---
+// --- 10. FUNCIONES DE TIEMPO ---
+
+function getTimeAgo(timestamp) {
+    const now = Date.now();
+    const diff = now - timestamp;
+    
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+    const days = Math.floor(hours / 24);
+    
+    if (seconds < 60) {
+        return 'justo ahora';
+    } else if (minutes < 60) {
+        return `hace ${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`;
+    } else if (hours < 24) {
+        return `hace ${hours} ${hours === 1 ? 'hora' : 'horas'}`;
+    } else {
+        return `hace ${days} ${days === 1 ? 'día' : 'días'}`;
+    }
+}
+
+function updateSeenIndicator(messageElement, readAt, messageId) {
+    if (!readAt) return;
+    
+    let seenIndicator = messageElement.querySelector('.seen-indicator');
+    
+    if (!seenIndicator) {
+        seenIndicator = document.createElement('div');
+        seenIndicator.className = 'seen-indicator';
+        messageElement.appendChild(seenIndicator);
+        
+        // Actualizar cada minuto
+        if (seenIntervals[messageId]) {
+            clearInterval(seenIntervals[messageId]);
+        }
+        seenIntervals[messageId] = setInterval(() => {
+            if (document.getElementById(messageId)) {
+                seenIndicator.innerHTML = `<i class="fas fa-eye"></i> Visto ${getTimeAgo(readAt)}`;
+            } else {
+                clearInterval(seenIntervals[messageId]);
+                delete seenIntervals[messageId];
+            }
+        }, 60000);
+    }
+    
+    seenIndicator.innerHTML = `<i class="fas fa-eye"></i> Visto ${getTimeAgo(readAt)}`;
+}
+
+// --- 11. RENDERIZADO DE MENSAJES ---
 
 function displayMessage(messageId, message) {
     const isSentByCurrentUser = message.sender === currentUser;
@@ -271,14 +514,12 @@ function displayMessage(messageId, message) {
         messageContentDiv.appendChild(senderName);
     }
     
-    // Vista previa de respuesta
     if (message.replyTo) {
         const quoteDiv = document.createElement('div');
         quoteDiv.className = 'reply-quote';
         const quoteUser = document.createElement('strong');
         quoteUser.textContent = message.replyTo.sender;
         const quoteText = document.createElement('p');
-        // Mostrar solo un fragmento del texto de la respuesta
         quoteText.textContent = message.replyTo.text.length > 50 ? message.replyTo.text.substring(0, 50) + '...' : message.replyTo.text;
         quoteDiv.appendChild(quoteUser);
         quoteDiv.appendChild(quoteText);
@@ -306,28 +547,47 @@ function displayMessage(messageId, message) {
     
     messageWrapper.appendChild(messageContentDiv);
     
-    // Acciones (Responder/Reaccionar)
     const actionsDiv = createMessageActions(messageId, message);
     messageWrapper.appendChild(actionsDiv);
     
-    // Reacciones mostradas
     const reactionsDiv = document.createElement('div');
     reactionsDiv.className = `reactions ${isSentByCurrentUser ? 'sent-reactions' : 'received-reactions'}`;
     addReactions(reactionsDiv, messageId, message.reactions);
     messageWrapper.appendChild(reactionsDiv);
 
+    // Agregar indicador de "Visto" si el mensaje fue leído
+    if (isSentByCurrentUser && message.read && message.readAt) {
+        const seenIndicator = document.createElement('div');
+        seenIndicator.className = 'seen-indicator';
+        seenIndicator.innerHTML = `<i class="fas fa-eye"></i> Visto ${getTimeAgo(message.readAt)}`;
+        messageWrapper.appendChild(seenIndicator);
+        
+        // Actualizar el tiempo cada minuto
+        if (seenIntervals[messageId]) {
+            clearInterval(seenIntervals[messageId]);
+        }
+        seenIntervals[messageId] = setInterval(() => {
+            if (document.getElementById(messageId)) {
+                const indicator = document.getElementById(messageId).querySelector('.seen-indicator');
+                if (indicator) {
+                    indicator.innerHTML = `<i class="fas fa-eye"></i> Visto ${getTimeAgo(message.readAt)}`;
+                }
+            } else {
+                clearInterval(seenIntervals[messageId]);
+                delete seenIntervals[messageId];
+            }
+        }, 60000);
+    }
+
     chatMessages.appendChild(messageWrapper);
     
-    // Configurar Evento Táctil/Clic (versión robusta para móvil)
     setupTouchAction(messageWrapper, actionsDiv);
     
-    // Scroll al final
-    chatMessages.scrollTop = chatMessages.scrollHeight;
+    if (chatMessages) {
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    }
 }
 
-/**
- * ⏰ Función corregida para el formato de hora.
- */
 function formatTimestamp(timestamp) {
     if (!timestamp) return '';
     const date = new Date(timestamp);
@@ -342,27 +602,30 @@ function createMessageActions(messageId, message) {
     const actionsDiv = document.createElement('div');
     actionsDiv.className = 'message-actions';
 
-    // Botón de Responder
     const replyButton = document.createElement('button');
     replyButton.innerHTML = '<i class="fas fa-reply"></i>'; 
     replyButton.title = 'Responder';
     replyButton.onclick = () => {
         replyTo = { id: messageId, sender: message.sender, text: message.text };
-        document.getElementById('reply-user').textContent = message.sender;
-        document.getElementById('reply-text').textContent = message.text;
-        replyPreview.style.display = 'flex';
-        messageInput.focus();
+        const replyUser = document.getElementById('reply-user');
+        const replyText = document.getElementById('reply-text');
+        if (replyUser && replyText && replyPreview) {
+            replyUser.textContent = message.sender;
+            replyText.textContent = message.text;
+            replyPreview.style.display = 'flex';
+        }
+        if (messageInput) {
+            messageInput.focus();
+        }
         closeAllMessageActions(); 
     };
     actionsDiv.appendChild(replyButton);
     
-    // Botón para mostrar el selector de reacciones
     const reactButton = document.createElement('button');
     reactButton.innerHTML = '<i class="far fa-smile-wink"></i>'; 
     reactButton.title = 'Reaccionar';
     actionsDiv.appendChild(reactButton);
     
-    // Selector de reacciones flotante
     const reactionSelector = document.createElement('div');
     reactionSelector.className = 'reaction-selector';
     reactionSelector.style.display = 'none'; 
@@ -380,7 +643,6 @@ function createMessageActions(messageId, message) {
         reactionSelector.appendChild(btn);
     });
     
-    // Toggle selector de reacciones
     reactButton.onclick = (e) => {
         e.stopPropagation();
         document.querySelectorAll('.reaction-selector').forEach(sel => {
@@ -389,7 +651,6 @@ function createMessageActions(messageId, message) {
         reactionSelector.style.display = reactionSelector.style.display === 'none' ? 'flex' : 'none';
     };
     
-    // Cerrar el selector si se hace clic fuera
     document.addEventListener('click', (e) => {
         if (!actionsDiv.contains(e.target) && reactionSelector.style.display === 'flex') {
             reactionSelector.style.display = 'none';
@@ -432,15 +693,9 @@ function toggleReaction(messageId, emoji) {
     });
 }
 
-// -------------------------------------------------------------
-// --- 6. GESTIÓN DE EVENTOS TÁCTILES (TOQUE SIMPLE) ---
-// -------------------------------------------------------------
+// --- 12. EVENTOS TÁCTILES ---
 
-/**
- * 📱 Configura el evento de toque (touchstart) o clic para mostrar las acciones.
- */
 function setupTouchAction(messageWrapper, actionsDiv) {
-    
     let touchExecuted = false; 
 
     const handleAction = (e) => {
@@ -454,7 +709,6 @@ function setupTouchAction(messageWrapper, actionsDiv) {
         e.stopPropagation(); 
     };
 
-    // 1. Manejar el toque inicial (touchstart) - Preferido para móviles
     messageWrapper.addEventListener('touchstart', (e) => {
         touchExecuted = true;
         setTimeout(() => {
@@ -462,7 +716,6 @@ function setupTouchAction(messageWrapper, actionsDiv) {
         }, 100); 
     }, { passive: true });
     
-    // 2. Manejar el clic (fallback para PC)
     messageWrapper.addEventListener('click', (e) => {
         if (touchExecuted) {
             touchExecuted = false; 
@@ -471,22 +724,15 @@ function setupTouchAction(messageWrapper, actionsDiv) {
         handleAction(e);
     });
 
-
-    // 3. Listener global para cerrar las acciones abiertas cuando se toca/clica fuera
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.message') && !e.target.closest('.message-actions')) {
              closeAllMessageActions();
         }
     });
 
-    // 4. Si el usuario comienza a desplazarse, cerramos el menú.
     chatMessages.addEventListener('scroll', closeAllMessageActions, { passive: true });
 }
 
-/**
- * Cierra todas las acciones de mensaje abiertas.
- * @param {HTMLElement} [excludeActionsDiv=null] - Opcional: El div de acciones a excluir del cierre.
- */
 function closeAllMessageActions(excludeActionsDiv = null) {
     document.querySelectorAll('.message-actions').forEach(actionsDiv => {
         if (actionsDiv !== excludeActionsDiv) {
@@ -499,4 +745,3 @@ function closeAllMessageActions(excludeActionsDiv = null) {
         }
     });
 }
-

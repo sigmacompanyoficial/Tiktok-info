@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Realtime - WhatsApp Oscuro (Rediseño Funcional)</title>
+    <title>Chat Realtime - Moderno</title>
     <link rel="stylesheet" href="chat.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1.18.0/index.js" type="module"></script>
@@ -22,11 +22,17 @@
                 <button id="home-button" title="Volver a Inicio">
                     <i class="fas fa-home"></i>
                 </button>
+                <button id="clear-all-button" title="Eliminar todos los mensajes">
+                    <i class="fas fa-trash-alt"></i>
+                </button>
                 <button id="logout-button" title="Cerrar Sesión">Logout</button>
             </div>
         </div>
         
         <div class="chat-messages" id="chat-messages">
+        </div>
+        
+        <div class="typing-indicator" id="typing-indicator" style="display: none;">
         </div>
         
         <div class="reply-preview" id="reply-preview" style="display: none;">
@@ -55,7 +61,7 @@
                 </svg>
             </button>
         </form>
-        </div>
+    </div>
 
     <script src="chat.js" type="module"></script>
 </body>

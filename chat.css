@@ -160,6 +160,18 @@ body, html {
     color: white;
 }
 
+#clear-all-button {
+    background: rgba(239, 68, 68, 0.1);
+    border-color: rgba(239, 68, 68, 0.3);
+    color: #f87171;
+}
+
+#clear-all-button:hover {
+    background: #ef4444;
+    border-color: #ef4444;
+    color: white;
+}
+
 /* ----------------------------------------------------------
     ÁREA DE MENSAJES
 ---------------------------------------------------------- */
@@ -188,6 +200,98 @@ body, html {
                 radial-gradient(circle at 80% 80%, rgba(139, 92, 246, 0.05) 0%, transparent 50%);
     pointer-events: none;
     z-index: 0;
+}
+
+/* ----------------------------------------------------------
+    INDICADOR DE "ESTÁ ESCRIBIENDO" - ESTILO WHATSAPP
+---------------------------------------------------------- */
+.typing-indicator {
+    padding: 12px 6%;
+    background: transparent;
+    display: none;
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 12px;
+    animation: fadeIn 0.3s ease;
+    position: relative;
+    z-index: 50;
+}
+
+.typing-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: var(--accent-gradient);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 700;
+    font-size: 1rem;
+    flex-shrink: 0;
+    box-shadow: var(--shadow-md);
+}
+
+.typing-bubble {
+    background: var(--message-received);
+    border-radius: 16px;
+    border-bottom-left-radius: 4px;
+    padding: 16px 20px;
+    box-shadow: var(--shadow-md);
+    position: relative;
+    animation: bubbleAppear 0.3s ease;
+}
+
+@keyframes bubbleAppear {
+    0% {
+        opacity: 0;
+        transform: scale(0.8) translateY(10px);
+    }
+    100% {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
+}
+
+.typing-dots-bubble {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    min-width: 60px;
+    height: 20px;
+}
+
+.typing-dot {
+    width: 10px;
+    height: 10px;
+    background: var(--text-secondary);
+    border-radius: 50%;
+    display: block;
+    animation: typingBounce 1.4s infinite ease-in-out both;
+}
+
+.typing-dot:nth-child(1) {
+    animation-delay: 0s;
+}
+
+.typing-dot:nth-child(2) {
+    animation-delay: 0.2s;
+}
+
+.typing-dot:nth-child(3) {
+    animation-delay: 0.4s;
+}
+
+@keyframes typingBounce {
+    0%, 60%, 100% {
+        transform: translateY(0);
+        opacity: 0.4;
+    }
+    30% {
+        transform: translateY(-8px);
+        opacity: 1;
+    }
 }
 
 /* ----------------------------------------------------------
@@ -418,6 +522,28 @@ body, html {
     background: var(--accent-primary);
     border-color: var(--accent-primary);
     transform: scale(1.05);
+}
+
+/* ----------------------------------------------------------
+    INDICADOR DE "VISTO"
+---------------------------------------------------------- */
+.seen-indicator {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 4px;
+    padding: 4px 8px;
+    background: rgba(99, 102, 241, 0.1);
+    border-radius: 8px;
+    align-self: flex-end;
+    animation: fadeIn 0.3s ease;
+}
+
+.seen-indicator i {
+    color: var(--accent-primary);
+    font-size: 0.7rem;
 }
 
 /* ----------------------------------------------------------
@@ -672,4 +798,29 @@ emoji-picker {
     opacity: 1 !important;
     pointer-events: all !important;
     display: flex !important;
+}
+/* ----------------------------------------------------------
+    AJUSTE DE POSICIONAMIENTO DEL INDICADOR DE ESCRITURA
+---------------------------------------------------------- */
+.typing-indicator {
+    /* Poscionamiento fijo para que esté sobre la barra de entrada */
+    position: fixed; 
+    bottom: 80px; /* Eleva el indicador por encima del formulario de mensaje */
+    left: 0;
+    right: 0;
+    padding: 12px 6%;
+    background: transparent;
+    display: none; 
+    flex-direction: row;
+    align-items: flex-end;
+    gap: 12px;
+    z-index: 100;
+    animation: fadeIn 0.3s ease;
+}
+
+@media (max-width: 768px) {
+    .typing-indicator {
+        bottom: 70px; /* Ajuste para pantallas pequeñas */
+        padding: 12px 4%;
+    }
 }
