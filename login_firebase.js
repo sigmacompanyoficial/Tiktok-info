@@ -4,14 +4,14 @@ import { getDatabase, ref, get, child } from "https://www.gstatic.com/firebasejs
 
 // La configuración de tu app web de Firebase
 const firebaseConfig = {
-    apiKey: "AIzaSyCb_S9CK0_DdfBhQCocYxHDajUI4XigVRU",
-    authDomain: "sigma-xat-72e47.firebaseapp.com",
-    databaseURL: "https://sigma-xat-72e47-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "sigma-xat-72e47",
-    storageBucket: "sigma-xat-72e47.firebasestorage.app",
-    messagingSenderId: "938349819018",
-    appId: "1:938349819018:web:157a24946dfa7627f62973",
-    measurementId: "G-FBPS4KHTSH"
+    apiKey: "AIzaSyA-ODwm4wUWYsfbgtmy4jelIPlsZsCQ4Ck",
+    authDomain: "sigma-xat2.firebaseapp.com",
+    databaseURL: "https://sigma-xat2-default-rtdb.europe-west1.firebasedatabase.app", // <--- ¡ESTE ES EL CAMBIO CLAVE!
+    projectId: "sigma-xat2",
+    storageBucket: "sigma-xat2.firebasestorage.app",
+    messagingSenderId: "419112986768",
+    appId: "1:419112986768:web:e930c6c22445295b871015",
+    measurementId: "G-98YHEDL7YT"
 };
 
 // Inicializar Firebase
