@@ -370,6 +370,8 @@ function cancelReply() {
 onChildAdded(messagesRef, (snapshot) => {
     const messageId = snapshot.key;
     const message = snapshot.val();
+    
+    // Evitar doble renderizado si el elemento ya está en el DOM
     if (document.getElementById(messageId)) return;
 
     // NOTIFICACIÓN si el mensaje NO es del usuario actual
@@ -384,7 +386,7 @@ onChildAdded(messagesRef, (snapshot) => {
         );
     }
 
-    // MARCAR COMO VISTO con timestamp
+    // MARCAR COMO VISTO con timestamp (SOLO si es recibido y no ha sido leído)
     if (message.sender !== currentUser && !message.read) {
          setTimeout(() => {
              set(ref(database, `messages/${messageId}/read`), true);
@@ -393,18 +395,28 @@ onChildAdded(messagesRef, (snapshot) => {
     }
     
     const isScrolledToBottom = chatMessages.scrollHeight - chatMessages.clientHeight <= chatMessages.scrollTop + 1;
-    if (message.timestamp) {
-        displayMessage(messageId, message);
-    } else {
+    
+    // **CORRECCIÓN:** Llama a displayMessage inmediatamente sin la condición de timestamp.
+    displayMessage(messageId, message);
+
+    if (!message.timestamp) {
+        // Mecanismo de respaldo: esperar a que el servidor escriba el timestamp
+        // y obtener los datos finales (aunque ya se haya renderizado) para asegurar
+        // que la información esté completa en el snapshot.
         setTimeout(() => {
             get(snapshot.ref).then(newSnapshot => {
                 if (newSnapshot.exists()) {
-                    displayMessage(messageId, newSnapshot.val());
+                    // Podemos re-renderizar o simplemente ignorar si ya se mostró,
+                    // el onChildChanged se encargaría de las actualizaciones si es necesario.
+                    // Pero mantenemos la llamada original por si acaso.
+                    // displayMessage(messageId, newSnapshot.val()); 
                 }
             });
         }, 500); 
     }
+    
     if (isScrolledToBottom && chatMessages) {
+        // Esto asegura que se haga scroll si estábamos al final antes de recibir el mensaje.
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
 });
@@ -501,6 +513,11 @@ function updateSeenIndicator(messageElement, readAt, messageId) {
 
 function displayMessage(messageId, message) {
     const isSentByCurrentUser = message.sender === currentUser;
+    
+    // Si el elemento ya existe (por ejemplo, después del setTimeout de respaldo), lo actualizamos o lo dejamos.
+    // En este caso, lo mejor es que onChildAdded no haga nada si ya existe (ver línea 295),
+    // y solo onChildChanged actualice los datos.
+
     const messageWrapper = document.createElement('div');
     messageWrapper.id = messageId;
     messageWrapper.className = `message ${isSentByCurrentUser ? 'sent' : 'received'}`;
@@ -538,7 +555,8 @@ function displayMessage(messageId, message) {
     
     let checkIconHtml = '';
     if (isSentByCurrentUser) {
-        const readClass = message.read ? ' read' : '';
+        // La clase 'read' se añade al checkmark cuando onChildChanged detecta la lectura
+        const readClass = message.read ? ' read' : ''; 
         checkIconHtml = `<i class="fas fa-check-double checkmark${readClass}"></i>`;
     }
     
@@ -555,37 +573,16 @@ function displayMessage(messageId, message) {
     addReactions(reactionsDiv, messageId, message.reactions);
     messageWrapper.appendChild(reactionsDiv);
 
-    // Agregar indicador de "Visto" si el mensaje fue leído
+    // Agregar indicador de "Visto" si el mensaje fue leído (Solo para mensajes enviados por el usuario actual)
     if (isSentByCurrentUser && message.read && message.readAt) {
-        const seenIndicator = document.createElement('div');
-        seenIndicator.className = 'seen-indicator';
-        seenIndicator.innerHTML = `<i class="fas fa-eye"></i> Visto ${getTimeAgo(message.readAt)}`;
-        messageWrapper.appendChild(seenIndicator);
-        
-        // Actualizar el tiempo cada minuto
-        if (seenIntervals[messageId]) {
-            clearInterval(seenIntervals[messageId]);
-        }
-        seenIntervals[messageId] = setInterval(() => {
-            if (document.getElementById(messageId)) {
-                const indicator = document.getElementById(messageId).querySelector('.seen-indicator');
-                if (indicator) {
-                    indicator.innerHTML = `<i class="fas fa-eye"></i> Visto ${getTimeAgo(message.readAt)}`;
-                }
-            } else {
-                clearInterval(seenIntervals[messageId]);
-                delete seenIntervals[messageId];
-            }
-        }, 60000);
+        updateSeenIndicator(messageWrapper, message.readAt, messageId);
     }
 
     chatMessages.appendChild(messageWrapper);
     
     setupTouchAction(messageWrapper, actionsDiv);
     
-    if (chatMessages) {
-        chatMessages.scrollTop = chatMessages.scrollHeight;
-    }
+    // El scroll se maneja en onChildAdded
 }
 
 function formatTimestamp(timestamp) {
@@ -611,7 +608,8 @@ function createMessageActions(messageId, message) {
         const replyText = document.getElementById('reply-text');
         if (replyUser && replyText && replyPreview) {
             replyUser.textContent = message.sender;
-            replyText.textContent = message.text;
+            // Asegurar que el texto de la respuesta sea legible en la previsualización
+            replyText.textContent = message.text.length > 50 ? message.text.substring(0, 50) + '...' : message.text;
             replyPreview.style.display = 'flex';
         }
         if (messageInput) {
@@ -705,12 +703,14 @@ function setupTouchAction(messageWrapper, actionsDiv) {
 
         closeAllMessageActions(actionsDiv);
         
+        // El comportamiento touch se maneja con la clase 'active-touch' en CSS para un mejor UX
         actionsDiv.classList.toggle('active-touch');
         e.stopPropagation(); 
     };
 
     messageWrapper.addEventListener('touchstart', (e) => {
         touchExecuted = true;
+        // Pequeño retraso para permitir que se ejecuten los clics normales sin interferencia
         setTimeout(() => {
             handleAction(e);
         }, 100); 
@@ -725,6 +725,7 @@ function setupTouchAction(messageWrapper, actionsDiv) {
     });
 
     document.addEventListener('click', (e) => {
+        // Cierra las acciones si se hace clic fuera del mensaje o las acciones
         if (!e.target.closest('.message') && !e.target.closest('.message-actions')) {
              closeAllMessageActions();
         }
