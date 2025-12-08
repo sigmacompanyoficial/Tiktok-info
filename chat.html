@@ -306,7 +306,8 @@
             position: relative;
             animation: messageSlideIn 0.3s ease;
             z-index: 1;
-            margin-bottom: 4px;
+            margin-bottom: 4px; 
+            flex-direction: column;
         }
 
         @keyframes messageSlideIn {
@@ -322,9 +323,21 @@
 
         .message-wrapper.sent {
             align-self: flex-end;
-            flex-direction: row-reverse;
         }
 
+        /* Contenedor real del mensaje (avatar y burbuja) */
+        .message-wrapper > .message-container {
+            display: flex;
+            gap: 8px;
+            flex-direction: row; 
+            align-self: flex-start;
+        }
+
+        .message-wrapper.sent > .message-container {
+            flex-direction: row-reverse;
+            align-self: flex-end;
+        }
+        
         .message-avatar {
             width: 32px;
             height: 32px;
@@ -416,30 +429,55 @@
             display: flex;
             align-items: center;
             gap: 4px;
+            align-self: flex-end; 
+            margin-right: 12px; 
+        }
+        
+        .message-wrapper.received .seen-indicator {
+            align-self: flex-start; 
+            margin-left: 12px;
         }
 
+        /* ESTILOS DE ACCIONES DE MENSAJES: UNIFICADO PARA PC Y MÓVIL */
         .message-actions {
-            position: absolute;
-            top: 50%;
-            right: -50px;
-            transform: translateY(-50%);
-            display: flex;
+            /* Eliminamos propiedades de posición absoluta: top, right, transform */
+            display: none; /* Ocultar por defecto en todos los dispositivos */
             gap: 4px;
             opacity: 0;
             pointer-events: none;
             transition: opacity 0.2s;
             z-index: 5;
+            position: relative; /* Para que ocupe su propio espacio debajo de la burbuja */
+            right: auto;
+            left: auto;
+            top: auto;
+            transform: none;
         }
 
-        .message-wrapper:hover .message-actions {
+        /* Regla unificada para mostrar acciones (al hacer click/tap) - Aparecen ABAJO */
+        .message-wrapper.active-actions .message-actions {
+            display: flex; /* Mostrar */
             opacity: 1;
             pointer-events: auto;
+            margin-top: 12px; /* Separación de la burbuja */
+        }
+        
+        /* Alineación: Recibidos (con avatar) - Alinear a la izquierda del texto */
+        .message-wrapper.received.active-actions .message-actions {
+            justify-content: flex-start; 
+            margin-left: 40px; /* 32px avatar + 8px gap */
+            margin-right: 0;
         }
 
-        .message-wrapper.sent .message-actions {
-            right: auto;
-            left: -50px;
+        /* Alineación: Enviados (sin avatar) - Alinear a la izquierda del mensaje (que ya está a la derecha) */
+        .message-wrapper.sent.active-actions .message-actions {
+            justify-content: flex-start; 
+            margin-right: 12px;
+            margin-left: 0;
         }
+        
+        /* El bloque @media (min-width: 901px) ha sido eliminado para unificar el comportamiento */
+
 
         .action-button {
             width: 32px;
@@ -495,8 +533,16 @@
         .message-reactions {
             display: flex;
             gap: 4px;
-            margin-top: 4px;
+            margin-top: 8px; 
             flex-wrap: wrap;
+            align-self: flex-start;
+            margin-left: 40px; 
+        }
+        
+        .message-wrapper.sent .message-reactions {
+            align-self: flex-end;
+            margin-right: 12px; 
+            margin-left: 0;
         }
 
         .reaction-badge {
@@ -786,26 +832,18 @@
                 max-width: 85%;
             }
 
+            /* Ocultar acciones por defecto en móvil */
             .message-actions {
                 display: none;
+                opacity: 0;
+                pointer-events: none;
+            }
+            
+            /* Ajustar márgenes para que las acciones en móvil se alineen correctamente */
+            .message-wrapper.received.active-actions .message-actions {
+                margin-left: 40px; 
             }
 
-            .message-wrapper .message-actions.active-touch {
-                display: flex;
-                opacity: 1;
-                pointer-events: auto;
-                position: relative;
-                right: auto;
-                left: auto;
-                top: auto;
-                transform: none;
-                margin-top: 8px;
-                justify-content: flex-end;
-            }
-
-            .message-wrapper.sent .message-actions.active-touch {
-                justify-content: flex-start;
-            }
 
             #emoji-picker-container {
                 right: 0;
@@ -876,7 +914,6 @@
 </head>
 <body>
     <div class="app-container">
-        <!-- SIDEBAR -->
         <div class="sidebar">
             <div class="user-info">
                 <div class="user-profile">
@@ -901,17 +938,12 @@
             </div>
 
             <div class="conversations-container" id="conversations-container">
-                <!-- Los contactos se cargarán dinámicamente aquí -->
-            </div>
+                </div>
         </div>
 
-        <!-- CHAT ROOM -->
         <div class="chat-room-panel" id="chat-room-panel">
             <div class="chat-header">
                 <div class="contact-info">
-                    <button class="mobile-back-button">
-                        <i class="fas fa-arrow-left"></i>
-                    </button>
                     <div class="chat-contact-avatar" id="chat-contact-avatar">U</div>
                     <div class="contact-details">
                         <h3 id="current-chat-name">Selecciona un chat</h3>
@@ -921,12 +953,10 @@
             </div>
 
             <div class="chat-messages" id="chat-messages">
-                <!-- Los mensajes se cargarán dinámicamente aquí -->
-            </div>
+                </div>
 
             <div id="typing-indicator">
-                <!-- Se llenará dinámicamente -->
-            </div>
+                </div>
 
             <div class="input-area">
                 <div id="reply-preview">
@@ -957,15 +987,13 @@
                 </form>
 
                 <div id="emoji-picker-container">
-                    <!-- El emoji picker se cargará aquí -->
-                </div>
+                    </div>
             </div>
         </div>
     </div>
 
     <script type="module" src="chat.js"></script>
     <script>
-        // Inicializar avatar del usuario actual
         document.addEventListener('DOMContentLoaded', () => {
             const username = sessionStorage.getItem('username');
             if (username) {
@@ -975,15 +1003,12 @@
                 }
             }
 
-            // Verificar que los mensajes se rendericen
             const chatMessages = document.getElementById('chat-messages');
             if (chatMessages) {
-                // Observer para detectar cuando se agregan mensajes
                 const observer = new MutationObserver((mutations) => {
                     const hasMessages = chatMessages.children.length > 0;
                     if (hasMessages) {
                         chatMessages.classList.add('has-messages');
-                        // Scroll al final cuando se carguen mensajes
                         setTimeout(() => {
                             chatMessages.scrollTop = chatMessages.scrollHeight;
                         }, 100);
