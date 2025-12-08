@@ -6,7 +6,7 @@ import { getDatabase, ref, get, child } from "https://www.gstatic.com/firebasejs
 const firebaseConfig = {
     apiKey: "AIzaSyA-ODwm4wUWYsfbgtmy4jelIPlsZsCQ4Ck",
     authDomain: "sigma-xat2.firebaseapp.com",
-    databaseURL: "https://sigma-xat2-default-rtdb.europe-west1.firebasedatabase.app", // <--- ¡ESTE ES EL CAMBIO CLAVE!
+    databaseURL: "https://sigma-xat2-default-rtdb.europe-west1.firebasedatabase.app", 
     projectId: "sigma-xat2",
     storageBucket: "sigma-xat2.firebasestorage.app",
     messagingSenderId: "419112986768",
@@ -45,7 +45,8 @@ loginForm.addEventListener('submit', async (e) => {
     const dbRef = ref(database);
 
     try {
-        const snapshot = await get(child(dbRef, `users/${username}`));
+        // CAMBIO CLAVE: Busca la contraseña en el nuevo nodo 'credentials'
+        const snapshot = await get(child(dbRef, `credentials/${username}`));
 
         if (snapshot.exists()) {
             // El usuario existe, ahora comprobamos la contraseña
@@ -59,7 +60,7 @@ loginForm.addEventListener('submit', async (e) => {
                 errorMessage.textContent = 'La contraseña es incorrecta.';
             }
         } else {
-            // El usuario no existe
+            // El usuario no existe (o no tiene credenciales en el nodo correcto)
             errorMessage.textContent = 'El usuario no existe.';
         }
     } catch (error) {

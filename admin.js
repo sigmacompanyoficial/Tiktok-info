@@ -42,20 +42,23 @@ createAccountForm.addEventListener('submit', async (e) => {
     const dbRef = ref(database);
 
     try {
-        // 1. Comprobar si el usuario ya existe
-        const userSnapshot = await get(child(dbRef, `users/${newUsername}`));
-        if (userSnapshot.exists()) {
-            statusMessage.textContent = `El usuario "${newUsername}" ya existe.`;
+        // 1. Comprobar si las credenciales ya existen en el nodo /credentials
+        const credentialsSnapshot = await get(child(dbRef, `credentials/${newUsername}`));
+        if (credentialsSnapshot.exists()) {
+            statusMessage.textContent = `El usuario "${newUsername}" ya tiene una cuenta.`;
             statusMessage.classList.add('error');
             return;
         }
 
-        // 2. Si no existe, crearlo
-        const newUserRef = ref(database, 'users/' + newUsername);
-        await set(newUserRef, {
+        // 2. Si no existe, crear la credencial en el nodo /credentials
+        const newCredentialRef = ref(database, 'credentials/' + newUsername);
+        await set(newCredentialRef, {
             password: newPassword
         });
         
+        // OPCIONAL: También puedes crear el nodo de presencia (/users) aquí para inicializarlo, 
+        // aunque se creará automáticamente en chat.js al iniciar sesión.
+
         statusMessage.textContent = `¡Cuenta para "${newUsername}" creada exitosamente!`;
         statusMessage.classList.add('success');
         

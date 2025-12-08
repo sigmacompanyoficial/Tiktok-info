@@ -12,7 +12,7 @@ import {
     set,
     remove,
     get,
-    onDisconnect, // Agregado onDisconnect para estado de presencia
+    onDisconnect, 
 } from "https://www.gstatic.com/firebasejs/12.6.0/firebase-database.js";
 
 // ************************************************************
@@ -68,10 +68,8 @@ let allMessages = {};
 let activeChatUser = null; 
 let USERS_STATUS = {}; // Estado en línea/última vez visto de todos los usuarios
 
-// Lista de contactos (Se llenará dinámicamente con los mensajes entrantes)
-const CONTACTS_LIST = [
-    { username: 'Soporte TikTok', lastMessage: 'Bienvenido al soporte.', timestamp: Date.now(), unread: 0 },
-];
+// MODIFICACIÓN: Cambiamos de array a objeto/mapa para gestionar contactos dinámicamente
+let CONTACTS_MAP = {}; 
 
 
 // --- FUNCIONES DE UTILIDAD ---
@@ -107,8 +105,9 @@ if (!currentUser) {
     setupUserPresence(); // Inicializar el estado de presencia del usuario actual
 }
 
-// Lógica de Presencia (Estado Online/Offline)
+// Lógica de Presencia (Estado Online/Offline) y carga de contactos
 function setupUserPresence() {
+    // IMPORTANTE: SOLO ESCRIBE EN EL NODO /users (Presencia)
     const userStatusRef = ref(database, `users/${currentUser}`);
 
     // Establecer el estado inicial a 'online' y última vez visto
@@ -123,15 +122,35 @@ function setupUserPresence() {
         lastSeen: serverTimestamp() 
     });
     
-    // Escuchar cambios en el estado de los usuarios
+    // Escuchar cambios en el estado de los usuarios (y poblar la lista de contactos)
     onValue(usersRef, (snapshot) => {
         USERS_STATUS = {};
+        const tempUsersMap = {}; // Nuevo mapa temporal para nuevos contactos
         if (snapshot.exists()) {
             snapshot.forEach((childSnapshot) => {
                 const username = childSnapshot.key;
-                USERS_STATUS[username] = childSnapshot.val();
+                const status = childSnapshot.val();
+                USERS_STATUS[username] = status;
+                
+                // Si no soy yo, lo agregamos como potencial contacto.
+                if (!caseInsensitiveEquals(username, currentUser)) {
+                    // Usamos el estado del usuario como base
+                    tempUsersMap[username] = {
+                        username: username,
+                        // Mantiene lastMessage/unread si ya estaba en CONTACTS_MAP. Si no, usa null/0
+                        lastMessage: CONTACTS_MAP[username] ? CONTACTS_MAP[username].lastMessage : null, 
+                        timestamp: CONTACTS_MAP[username] ? CONTACTS_MAP[username].timestamp : status.lastSeen || Date.now(),
+                        unread: CONTACTS_MAP[username] ? CONTACTS_MAP[username].unread : 0,
+                    };
+                }
             });
         }
+
+        // Fusionar: los usuarios que existen en Firebase (tempUsersMap) se añaden.
+        // Los datos de conversación (lastMessage, unread) se mantienen en tempUsersMap si ya existían.
+        // Si un usuario se eliminó de Firebase, se quitará del mapa en este proceso.
+        CONTACTS_MAP = tempUsersMap; 
+        
         renderConversationsList();
         updateChatHeaderStatus(); // Actualizar el estado del chat activo
     });
@@ -227,11 +246,11 @@ function renderConversationsList() {
 
     conversationsContainer.innerHTML = '';
     
-    // Ordenar por el mensaje más reciente
-    const sortedContacts = [...CONTACTS_LIST].sort((a, b) => b.timestamp - a.timestamp);
+    // Convertir el mapa de contactos a un array para poder ordenarlo
+    const sortedContacts = Object.values(CONTACTS_MAP).sort((a, b) => b.timestamp - a.timestamp);
     
     sortedContacts.forEach(contact => {
-        // No mostrarse a uno mismo en la lista de chats
+        // No mostrarse a uno mismo en la lista de chats (redundante, pero seguro)
         if (caseInsensitiveEquals(contact.username, currentUser)) return;
 
         const item = document.createElement('div');
@@ -300,10 +319,9 @@ function setActiveChat(username) {
         chatMessages.scrollTop = chatMessages.scrollHeight;
     }
     
-    // 3. Resetear contador de no leídos
-    const contactIndex = CONTACTS_LIST.findIndex(c => caseInsensitiveEquals(c.username, username));
-    if (contactIndex !== -1) {
-         CONTACTS_LIST[contactIndex].unread = 0;
+    // 3. Resetear contador de no leídos (usando CONTACTS_MAP)
+    if (CONTACTS_MAP[username]) {
+         CONTACTS_MAP[username].unread = 0;
          renderConversationsList();
     }
     
@@ -330,29 +348,30 @@ onChildAdded(messagesRef, (snapshot) => {
     // Si yo lo envié, el contacto es el receiver. Si me lo enviaron, el contacto es el sender.
     const interactionPartner = caseInsensitiveEquals(message.sender, currentUser) ? message.receiver : message.sender;
 
-    // Ignorar mensajes corruptos sin participantes
-    if(!interactionPartner) return;
+    // Ignorar mensajes corruptos sin participantes o si es un chat consigo mismo (aunque debería evitarse)
+    if(!interactionPartner || caseInsensitiveEquals(interactionPartner, currentUser)) return;
 
-    // 2. ACTUALIZAR LISTA DE CONTACTOS DINÁMICAMENTE
-    let contactIndex = CONTACTS_LIST.findIndex(c => caseInsensitiveEquals(c.username, interactionPartner));
+    // 2. ACTUALIZAR LISTA DE CONTACTOS DINÁMICAMENTE (usando CONTACTS_MAP)
+    let contact = CONTACTS_MAP[interactionPartner];
     
-    if (contactIndex === -1) {
-        // ¡NUEVO CONTACTO DETECTADO! Lo agregamos a la lista.
-        CONTACTS_LIST.push({
+    if (!contact) {
+        // ¡NUEVO CONTACTO DETECTADO! Lo agregamos al mapa (aunque ya debería estar por /users)
+        contact = {
             username: interactionPartner,
             lastMessage: message.text,
             timestamp: message.timestamp || Date.now(),
             unread: caseInsensitiveEquals(message.sender, currentUser) ? 0 : 1
-        });
+        };
+        CONTACTS_MAP[interactionPartner] = contact;
     } else {
         // Actualizamos contacto existente
-        CONTACTS_LIST[contactIndex].lastMessage = message.text;
-        CONTACTS_LIST[contactIndex].timestamp = message.timestamp || Date.now();
+        contact.lastMessage = message.text;
+        contact.timestamp = message.timestamp || Date.now();
         
         // Incrementar contador si no lo envié yo y no estoy en ese chat ahora mismo
         if (!caseInsensitiveEquals(message.sender, currentUser) && 
             !caseInsensitiveEquals(interactionPartner, activeChatUser)) {
-             CONTACTS_LIST[contactIndex].unread = (CONTACTS_LIST[contactIndex].unread || 0) + 1;
+             contact.unread = (contact.unread || 0) + 1;
         }
     }
     
@@ -478,8 +497,6 @@ function setupEmojiPicker() {
     if (customElements.get('emoji-picker')) { 
         const picker = document.createElement('emoji-picker');
         emojiPickerContainer.appendChild(picker);
-        // Usaremos la clase CSS para controlar la visibilidad y animación
-        // emojiPickerContainer.style.display = 'none'; // Ya no es necesario
         
         picker.addEventListener('emoji-click', event => {
             const emoji = event.detail.unicode;
@@ -608,9 +625,12 @@ if (clearAllButton) {
                 .then(() => {
                     if (chatMessages) chatMessages.innerHTML = '';
                     allMessages = {};
-                    // Resetear lista dejando solo el soporte
-                    CONTACTS_LIST.length = 0;
-                    CONTACTS_LIST.push({ username: 'Soporte TikTok', lastMessage: 'Chat reiniciado', timestamp: Date.now(), unread: 0 });
+                    // Restablecer la información de conversación (lastMessage, unread) en el mapa
+                    for (const user in CONTACTS_MAP) {
+                        CONTACTS_MAP[user].lastMessage = 'Chat reiniciado';
+                        CONTACTS_MAP[user].timestamp = Date.now();
+                        CONTACTS_MAP[user].unread = 0;
+                    }
                     renderConversationsList(); 
                 });
         }
