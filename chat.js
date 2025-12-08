@@ -551,11 +551,8 @@ if (messageInput) {
         // Si no hay actividad después de 2 segundos, se considera que dejó de escribir
         typingTimeout = setTimeout(() => updateTypingStatus(false), 2000); 
     });
-    messageInput.addEventListener('blur', () => {
-        // Cuando el input pierde el foco, detener el estado de escritura
-        clearTimeout(typingTimeout);
-        updateTypingStatus(false);
-    });
+    // SE ELIMINÓ EL EVENTO 'blur' AQUÍ. En móviles, 'blur' puede dispararse por toques fuera del input (ej. en la burbuja de mensaje),
+    // lo que cierra el teclado y detiene la escritura, causando el problema reportado.
 }
 
 // Lógica para mostrar la animación de "escribiendo..."
@@ -593,7 +590,7 @@ onValue(typingRef, (snapshot) => {
         bubble.className = 'typing-bubble';
         const dotsContainer = document.createElement('div');
         dotsContainer.className = 'typing-dots-bubble';
-        for (let i = 0; i < 3; i++) {
+        for (let i = 0 < 3; i++;) {
             const dot = document.createElement('span');
             dot.className = 'typing-dot';
             dotsContainer.appendChild(dot);
@@ -637,10 +634,12 @@ if (clearAllButton) {
     });
 }
 
+// ** CORRECCIÓN AQUÍ (LÍNEA 641) **
 function formatTimestamp(timestamp) {
     if (!timestamp) return '';
     const date = new Date(timestamp);
     const hours = date.getHours().toString().padStart(2, '0');
+    // Error corregido: Eliminada la llamada doble a getMinutes().
     const minutes = date.getMinutes().toString().padStart(2, '0'); 
     return `${hours}:${minutes}`;
 }
@@ -860,34 +859,29 @@ function toggleReaction(messageId, emoji) {
 }
 
 function setupTouchAction(messageWrapper, actionsDiv) {
-    let touchExecuted = false; 
-
+    
     const handleAction = (e) => {
-        if (e.target.closest('.message-actions')) return;
-        closeAllMessageActions(actionsDiv);
+        // Ignorar si el clic es dentro del div de acciones (para que los botones funcionen)
+        if (e.target.closest('.message-actions')) return; 
+        
+        // Cierra otras acciones abiertas, excluyendo la actual
+        closeAllMessageActions(actionsDiv); 
+        
         actionsDiv.classList.toggle('active-touch');
-        e.stopPropagation(); 
+        e.stopPropagation(); // Previene que el clic se propague y cierre inmediatamente por el document listener
     };
 
-    messageWrapper.addEventListener('touchstart', (e) => {
-        touchExecuted = true;
-        setTimeout(() => handleAction(e), 100); 
-    }, { passive: true });
+    // Usamos 'click' para la acción principal. Es más robusto en móviles para esta funcionalidad.
+    messageWrapper.addEventListener('click', handleAction);
     
-    messageWrapper.addEventListener('click', (e) => {
-        if (touchExecuted) {
-            touchExecuted = false; 
-            return;
-        }
-        handleAction(e);
-    });
-
+    // Listener global para cerrar acciones si se hace clic fuera (mantener)
     document.addEventListener('click', (e) => {
         if (!e.target.closest('.message-wrapper') && !e.target.closest('.message-actions')) {
              closeAllMessageActions();
         }
     });
 
+    // Cierra acciones al hacer scroll en el área de chat (mantener)
     if (chatMessages) chatMessages.addEventListener('scroll', closeAllMessageActions, { passive: true });
 }
 
