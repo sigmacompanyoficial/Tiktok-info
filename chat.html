@@ -58,34 +58,35 @@
             <div class="typing-indicator" id="typing-indicator" style="display: none;">
                 </div>
             
-            <div class="reply-preview" id="reply-preview" style="display: none;">
-                <div class="reply-content">
-                    <p>Respondiendo a: <strong id="reply-user"></strong></p>
-                    <p id="reply-text"></p>
+            <div class="chat-footer">
+                <div class="reply-preview" id="reply-preview" style="display: none;">
+                    <div class="reply-content">
+                        <p>Respondiendo a: <strong id="reply-user"></strong></p>
+                        <p id="reply-text"></p>
+                    </div>
+                    <button class="cancel-reply" id="cancel-reply" title="Cancelar respuesta">
+                        <i class="fas fa-times"></i>
+                    </button>
                 </div>
-                <button class="cancel-reply" id="cancel-reply" title="Cancelar respuesta">
-                    <i class="fas fa-times"></i>
-                </button>
+
+                <div id="emoji-picker-container"></div>
+                    
+                <form id="message-form">
+                    
+                    <span class="input-icon" id="emoji-button" title="Emojis"><i class="far fa-smile"></i></span> 
+                    
+                    <div class="input-main-area">
+                        <input type="text" id="message-input" placeholder="Escribe un mensaje" autocomplete="off">
+                    </div>
+                    
+                    <button type="submit" id="send-button" title="Enviar mensaje">
+                        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" width="20" height="20">
+                            <path d="M476 3.2L12.5 270.6c-18.1 10.4-15.8 35.6 2.2 43.2L121 358.4l287.3-253.2c5.5-4.9 13.3 2.6 8.6 8.3L176 407v80.2c0 26.2 36.7 33.1 53.9 14.1l301.8-319.4c18-19.1 15.3-48.4-5.5-62.9z"/>
+                        </svg>
+                    </button>
+                </form>
             </div>
-
-            <div id="emoji-picker-container"></div>
-                
-            <form id="message-form">
-                
-                <span class="input-icon" id="emoji-button" title="Emojis"><i class="far fa-smile"></i></span> 
-                
-                <div class="input-main-area">
-                    <input type="text" id="message-input" placeholder="Escribe un mensaje" autocomplete="off">
-                </div>
-                
-                <button type="submit" id="send-button" title="Enviar mensaje">
-                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" width="20" height="20">
-                        <path d="M476 3.2L12.5 270.6c-18.1 10.4-15.8 35.6 2.2 43.2L121 358.4l287.3-253.2c5.5-4.9 13.3 2.6 8.6 8.3L176 407v80.2c0 26.2 36.7 33.1 53.9 14.1l301.8-319.4c18-19.1 15.3-48.4-5.5-62.9z"/>
-                    </svg>
-                </button>
-            </form>
-
-        </div>
+            </div>
     </div>
 
     <script src="chat.js" type="module"></script>
