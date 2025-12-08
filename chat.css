@@ -900,6 +900,25 @@ emoji-picker {
     .list-header {
         border-bottom: 1px solid var(--border-color);
     }
+    
+    /* AJUSTES CLAVE: HACER ESPACIO PARA EL FOOTER FIJO */
+    .chat-messages {
+        /* Se necesita más espacio abajo para que el footer fijo no tape los mensajes */
+        padding: 24px 24px 100px 24px; 
+    }
+    
+    /* AJUSTES CLAVE: FIJAR EL FOOTER */
+    .chat-footer {
+        padding: 16px;
+        position: fixed; /* CLAVE: Ancla el footer al final de la pantalla */
+        bottom: 0;
+        left: 0;
+        right: 0;
+        z-index: 120; /* Asegura que esté por encima del chat-room-panel */
+        background-color: var(--bg-secondary); /* Asegura un fondo sólido */
+        box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.4); /* Estilo visual */
+        border-top: none; /* Quitamos el borde superior ya que la sombra es suficiente */
+    }
 
     .typing-indicator {
         left: 16px;
@@ -918,10 +937,6 @@ emoji-picker {
     
     #emoji-picker-container.active {
         transform: translateX(-50%) translateY(0);
-    }
-    
-    .chat-footer {
-        padding: 16px;
     }
     
     #message-form {
