@@ -1,12 +1,62 @@
+/* ----------------------------------------------------------
+    VARIABLES Y FUENTES
+---------------------------------------------------------- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+
+:root {
+    /* Colores del tema */
+    --color-dark-bg: #1f2838;
+    --color-card-bg: rgba(36, 47, 65, 0.7); /* Ligeramente transparente */
+    --color-accent-start: #3b82f6; /* Azul Primario */
+    --color-accent-end: #6366f1;   /* Púrpura */
+    --color-text-primary: #e2e8f0;
+    --color-text-secondary: #94a3b8;
+    --color-error: #f87171;
+    --shadow-strong: 0 10px 25px rgba(0, 0, 0, 0.5);
+    --border-radius-lg: 12px;
+}
+
+/* ----------------------------------------------------------
+    ESTRUCTURA Y FONDO
+---------------------------------------------------------- */
 body {
     margin: 0;
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'Inter', sans-serif;
     display: flex;
     justify-content: center;
     align-items: center;
     min-height: 100vh;
-    background-color: #292D36;
-    color: #fff;
+    background-color: var(--color-dark-bg);
+    color: var(--color-text-primary);
+    overflow: hidden; /* Evita el scroll si el fondo es grande */
+}
+
+/* Contenedor que simula el fondo de la aplicación */
+.background-container {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    /* Relleno visual para simular el fondo de la app */
+    background: url('https://picsum.photos/1920/1080?random=1') no-repeat center center/cover;
+    filter: brightness(0.4) blur(3px);
+    z-index: 0;
+}
+
+/* ----------------------------------------------------------
+    MODAL OVERLAY (La mejora clave)
+---------------------------------------------------------- */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
 }
 
 .login-container {
@@ -14,26 +64,43 @@ body {
     max-width: 400px;
     padding: 20px;
     box-sizing: border-box;
+    /* Efecto de 'vidrio' */
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border-radius: var(--border-radius-lg);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: var(--shadow-strong);
+    animation: fadeInScale 0.5s ease-out;
 }
 
+/* ----------------------------------------------------------
+    FORMULARIO Y ESTILOS
+---------------------------------------------------------- */
 .login-form {
-    background-color: #22252D;
-    padding: 40px;
-    border-radius: 10px;
-    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    background-color: var(--color-card-bg);
+    padding: 30px 40px;
+    border-radius: var(--border-radius-lg);
     text-align: center;
 }
 
+.modal-icon {
+    font-size: 3rem;
+    color: var(--color-accent-start);
+    margin-bottom: 10px;
+}
+
 h2 {
-    color: #26F3CE;
-    margin-bottom: 30px;
+    color: var(--color-text-primary);
+    margin-bottom: 25px;
+    font-weight: 700;
 }
 
 .error {
-    color: #E86A6A; /* Un color rojo suave para el error */
+    color: var(--color-error);
     height: 1.2em;
     margin-bottom: 15px;
     font-size: 0.9rem;
+    font-weight: 600;
 }
 
 .input-group {
@@ -44,39 +111,76 @@ h2 {
 .input-group label {
     display: block;
     margin-bottom: 8px;
-    color: #ccc;
+    color: var(--color-text-secondary);
     font-size: 0.9rem;
+    font-weight: 600;
 }
 
-.input-group input {
+.input-group label i {
+    margin-right: 8px;
+    color: var(--color-accent-end);
+}
+
+.login-form input[type="text"],
+.login-form input[type="password"] {
     width: 100%;
-    padding: 12px;
-    border: 1px solid #444;
-    border-radius: 5px;
-    background-color: #292D36;
-    color: #fff;
+    padding: 12px 15px;
+    border: none;
+    border-radius: 6px;
+    background-color: var(--color-dark-bg);
+    color: var(--color-text-primary);
     font-size: 1rem;
     box-sizing: border-box;
+    transition: all 0.3s ease;
+    border: 1px solid transparent;
 }
 
-.input-group input:focus {
+.login-form input:focus {
     outline: none;
-    border-color: #26F3CE;
+    border-color: var(--color-accent-start);
+    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
 }
 
-button {
+/* Estilo del botón (con gradiente y sombra) */
+.login-form button[type="submit"] {
     width: 100%;
-    padding: 12px;
+    padding: 12px 20px;
     border: none;
-    border-radius: 5px;
-    background-color: #26F3CE;
-    color: #22252D;
+    border-radius: 8px;
+    background: linear-gradient(90deg, var(--color-accent-start) 0%, var(--color-accent-end) 100%);
+    color: white;
     font-size: 1.1rem;
-    font-weight: bold;
+    font-weight: 700;
     cursor: pointer;
-    transition: background-color 0.2s;
+    margin-top: 15px;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 10px rgba(99, 102, 241, 0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
 }
 
-button:hover {
-    background-color: #21d1b5;
+.login-form button[type="submit"]:hover {
+    opacity: 0.9;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(99, 102, 241, 0.6);
+}
+
+.login-form button[type="submit"] i {
+    margin-right: 10px;
+    font-size: 1.1rem;
+}
+
+/* ----------------------------------------------------------
+    ANIMACIÓN DE ENTRADA
+---------------------------------------------------------- */
+@keyframes fadeInScale {
+    from {
+        opacity: 0;
+        transform: scale(0.95) translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1) translateY(0);
+    }
 }

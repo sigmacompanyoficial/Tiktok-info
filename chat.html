@@ -3,66 +3,92 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chat Realtime - Moderno</title>
+    <title>Sigma XAT - Soporte TikTok</title>
     <link rel="stylesheet" href="chat.css">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <script src="https://cdn.jsdelivr.net/npm/emoji-picker-element@1.18.0/index.js" type="module"></script>
 </head>
 <body>
-    <div class="chat-container"> 
+    
+    <div class="main-layout"> 
         
-        <div class="chat-header">
-            <div class="contact-info">
-                <div class="contact-avatar"></div> 
-                <div>
-                    <h1>Bienvenido, <span id="username-display">Usuario</span></h1> 
+        <div class="conversations-list-panel">
+            <div class="list-header">
+                <h2>Chats</h2>
+                <button id="logout-button" title="Cerrar Sesión">
+                    <i class="fas fa-sign-out-alt"></i>
+                </button>
+            </div>
+            
+            <div class="profile-info">
+                <div class="contact-avatar"></div>
+                <div class="username-display">
+                    <span id="username-display">Cargando...</span> 
+                    <p class="status-text">Conectado</p>
                 </div>
             </div>
-            <div class="header-actions">
-                <button id="home-button" title="Volver a Inicio">
-                    <i class="fas fa-home"></i>
-                </button>
-                <button id="clear-all-button" title="Eliminar todos los mensajes">
-                    <i class="fas fa-trash-alt"></i>
-                </button>
-                <button id="logout-button" title="Cerrar Sesión">Logout</button>
-            </div>
-        </div>
-        
-        <div class="chat-messages" id="chat-messages">
-        </div>
-        
-        <div class="typing-indicator" id="typing-indicator" style="display: none;">
-        </div>
-        
-        <div class="reply-preview" id="reply-preview" style="display: none;">
-            <div class="reply-content">
-                <p>Respondiendo a: <strong id="reply-user"></strong></p>
-                <p id="reply-text"></p>
-            </div>
-            <button class="cancel-reply" id="cancel-reply" title="Cancelar respuesta">
-                <i class="fas fa-times"></i>
-            </button>
+
+            <div class="conversations-container" id="conversations-container">
+                </div>
         </div>
 
-        <div id="emoji-picker-container"></div>
+        <div class="chat-room-panel" id="chat-room-panel">
             
-        <form id="message-form">
-            
-            <span class="input-icon" id="emoji-button" title="Emojis"><i class="far fa-smile"></i></span> 
-            
-            <div class="input-main-area">
-                <input type="text" id="message-input" placeholder="Escribe un mensaje" autocomplete="off">
+            <div class="chat-header">
+                <div class="contact-info">
+                    <div class="contact-avatar" id="chat-contact-avatar"></div> 
+                    <div>
+                        <h1 id="current-chat-name">Selecciona un chat</h1> 
+                        <p class="contact-status-text" id="contact-status-text">Cargando estado...</p> 
+                    </div>
+                </div>
+                <div class="header-actions">
+                    <button id="home-button" title="Volver a Inicio">
+                        <i class="fas fa-home"></i>
+                    </button>
+                    <button id="clear-all-button" title="Eliminar todos los mensajes">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
             </div>
             
-            <button type="submit" id="send-button" title="Enviar mensaje">
-                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" width="20" height="20">
-                    <path d="M476 3.2L12.5 270.6c-18.1 10.4-15.8 35.6 2.2 43.2L121 358.4l287.3-253.3c5.5-4.9 13.3 2.6 8.6 8.3L176 407v80.5c0 23.4 22 35.5 41.5 24.5l264-156.4c18.5-11 25-34.4 14-52.9L476 3.2z"/>
-                </svg>
-            </button>
-        </form>
+            <div class="chat-messages" id="chat-messages">
+                </div>
+            
+            <div class="typing-indicator" id="typing-indicator" style="display: none;">
+                </div>
+            
+            <div class="reply-preview" id="reply-preview" style="display: none;">
+                <div class="reply-content">
+                    <p>Respondiendo a: <strong id="reply-user"></strong></p>
+                    <p id="reply-text"></p>
+                </div>
+                <button class="cancel-reply" id="cancel-reply" title="Cancelar respuesta">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+
+            <div id="emoji-picker-container"></div>
+                
+            <form id="message-form">
+                
+                <span class="input-icon" id="emoji-button" title="Emojis"><i class="far fa-smile"></i></span> 
+                
+                <div class="input-main-area">
+                    <input type="text" id="message-input" placeholder="Escribe un mensaje" autocomplete="off">
+                </div>
+                
+                <button type="submit" id="send-button" title="Enviar mensaje">
+                    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="currentColor" width="20" height="20">
+                        <path d="M476 3.2L12.5 270.6c-18.1 10.4-15.8 35.6 2.2 43.2L121 358.4l287.3-253.2c5.5-4.9 13.3 2.6 8.6 8.3L176 407v80.2c0 26.2 36.7 33.1 53.9 14.1l301.8-319.4c18-19.1 15.3-48.4-5.5-62.9z"/>
+                    </svg>
+                </button>
+            </form>
+
+        </div>
     </div>
 
     <script src="chat.js" type="module"></script>
+    
 </body>
 </html>
