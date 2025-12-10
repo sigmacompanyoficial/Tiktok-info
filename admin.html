@@ -3,13 +3,14 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Panel de Administrador</title>
+    <title>Panel de Administrador Avanzado</title>
     <link rel="stylesheet" href="admin.css">
 </head>
 <body>
     <div class="admin-container">
-        <form class="admin-form" id="create-account-form">
-            <h2>Panel de Administrador</h2>
+        
+        <form class="admin-form create-account-section" id="create-account-form">
+            <h2>Panel de Administración</h2>
             <h4>Crear Nueva Cuenta</h4>
             <p id="status-message" class="status"></p>
             <div class="input-group">
@@ -22,10 +23,52 @@
             </div>
             <button type="submit">Crear Cuenta</button>
         </form>
+
+        <div class="admin-section message-management">
+            <h4>Gestión de Mensajes</h4>
+            <p id="message-count">Cargando número de mensajes...</p>
+            <button id="delete-all-messages-btn" class="delete-btn" disabled>Borrar Todos los Mensajes</button>
+        </div>
+
+        <div class="admin-section user-management">
+            <h4>Gestión de Usuarios</h4>
+            <table id="users-table">
+                <thead>
+                    <tr>
+                        <th>Usuario</th>
+                        <th>Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="users-table-body">
+                    <tr><td colspan="2">Cargando usuarios...</td></tr>
+                </tbody>
+            </table>
+        </div>
+
         <a href="index.html" class="back-link">Volver a la Calculadora</a>
     </div>
 
-    <!-- Scripts de Firebase y lógica del panel -->
+    <div id="edit-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-btn">&times;</span>
+            <h3>Editar Usuario: <span id="modal-username-display"></span></h3>
+            <p id="modal-status" class="status"></p>
+
+            <div class="input-group">
+                <label for="modal-new-password">Nueva Contraseña</label>
+                <input type="text" id="modal-new-password" placeholder="Dejar vacío para no cambiar">
+            </div>
+
+            <div class="input-group">
+                <label for="modal-new-username">Nuevo Nombre de Usuario</label>
+                <input type="text" id="modal-new-username" placeholder="Dejar vacío para no cambiar">
+            </div>
+
+            <button id="save-user-changes-btn">Guardar Cambios</button>
+        </div>
+    </div>
+
+
     <script src="admin.js" type="module"></script>
 </body>
 </html>

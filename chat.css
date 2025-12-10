@@ -950,3 +950,39 @@ emoji-picker {
         font-size: 16px; /* Evita zoom en iOS */
     }
 }
+
+
+/* ----------------------------------------------------------
+    PAGINACIÓN (NUEVO)
+---------------------------------------------------------- */
+.load-more-indicator {
+    display: none; /* Controlado con JS */
+    justify-content: center;
+    align-items: center;
+    padding: 10px;
+    margin: 10px 0;
+    cursor: pointer;
+    color: var(--accent-primary);
+    font-size: 0.9rem;
+    font-weight: 600;
+    border-radius: var(--border-radius);
+    transition: var(--transition);
+    gap: 8px;
+    text-align: center;
+    
+    /* Estilos visuales */
+    background-color: var(--bg-card); 
+    border: 1px solid var(--border-color);
+    flex-shrink: 0; /* Importante para que no desaparezca en el scroll */
+    width: 100%; /* Ocupa todo el ancho disponible */
+}
+
+.load-more-indicator:hover {
+    background-color: var(--bg-secondary);
+    transform: translateY(-1px);
+}
+
+.load-more-indicator i {
+    font-size: 1rem;
+}
+/* Tu código @media (max-width: 900px) {...} debe ir después o antes de estas reglas */

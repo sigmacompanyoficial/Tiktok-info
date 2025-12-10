@@ -993,6 +993,8 @@
     </div>
 
     <script type="module" src="chat.js"></script>
+ <script type="module" src="chat.js"></script>
+    
     <script>
         document.addEventListener('DOMContentLoaded', () => {
             const username = sessionStorage.getItem('username');
@@ -1002,27 +1004,9 @@
                     userAvatarMain.textContent = username.charAt(0).toUpperCase();
                 }
             }
-
-            const chatMessages = document.getElementById('chat-messages');
-            if (chatMessages) {
-                const observer = new MutationObserver((mutations) => {
-                    const hasMessages = chatMessages.children.length > 0;
-                    if (hasMessages) {
-                        chatMessages.classList.add('has-messages');
-                        setTimeout(() => {
-                            chatMessages.scrollTop = chatMessages.scrollHeight;
-                        }, 100);
-                    } else {
-                        chatMessages.classList.remove('has-messages');
-                    }
-                });
-
-                observer.observe(chatMessages, { 
-                    childList: true, 
-                    subtree: false 
-                });
-            }
         });
     </script>
+</body>
+</html>
 </body>
 </html>
