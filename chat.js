@@ -111,6 +111,7 @@ function getLatestConversationData(partner) {
     for (const id in allMessages) {
         const msg = allMessages[id];
         
+        // La condición de relevancia asegura que solo se consideren mensajes directos
         const isRelevant = 
             (caseInsensitiveEquals(msg.sender, currentUser) && caseInsensitiveEquals(msg.receiver, partner)) ||
             (caseInsensitiveEquals(msg.sender, partner) && caseInsensitiveEquals(msg.receiver, currentUser));
@@ -131,7 +132,8 @@ function getLatestConversationData(partner) {
         }
     }
     
-    return { latestMessage, unreadCount };
+    // Devolvemos el texto solo si es necesario, pero en este caso solo necesitamos timestamp y unreadCount para la lista.
+    return { latestMessage, latestTimestamp, unreadCount };
 }
 
 
@@ -168,14 +170,17 @@ function setupUserPresence() {
                 
                 if (!caseInsensitiveEquals(username, currentUser)) {
                     
-                    const { latestMessage, unreadCount } = getLatestConversationData(username);
-
-                    tempUsersMap[username] = {
-                        username: username,
-                        lastMessage: latestMessage ? latestMessage.text : null,
-                        timestamp: latestMessage ? latestMessage.timestamp : status.lastSeen || Date.now(),
-                        unread: unreadCount,
-                    };
+                    const { latestMessage, latestTimestamp, unreadCount } = getLatestConversationData(username);
+                    
+                    // Solo incluir en la lista si hay un mensaje o si es un usuario conocido (que se haya conectado alguna vez)
+                    if (latestMessage || status.isOnline) { 
+                        tempUsersMap[username] = {
+                            username: username,
+                            // QUITAMOS lastMessage PARA QUE NO APAREZCA EN LA LISTA
+                            timestamp: latestTimestamp || status.lastSeen || Date.now(),
+                            unread: unreadCount,
+                        };
+                    }
                 }
             });
         }
@@ -283,10 +288,12 @@ function renderConversationsList() {
     sortedContacts.forEach(contact => {
         if (caseInsensitiveEquals(contact.username, currentUser)) return;
 
-        if (!contact.lastMessage) {
+        // Si el contacto ya existe en CONTACTS_MAP, usamos sus datos.
+        // Si no existe, es un error, pero el bucle anterior ya lo gestionó.
+        // Recalculamos por si acaso
+        if (contact.unread === undefined) { 
              const latestData = getLatestConversationData(contact.username);
-             contact.lastMessage = latestData.latestMessage ? latestData.latestMessage.text : 'Nueva conversación';
-             contact.timestamp = latestData.latestMessage ? latestData.latestMessage.timestamp : contact.timestamp;
+             contact.timestamp = latestData.latestTimestamp || contact.timestamp;
              contact.unread = latestData.unreadCount;
         }
 
@@ -298,10 +305,16 @@ function renderConversationsList() {
         const status = USERS_STATUS[contact.username];
         const isOnline = status && status.isOnline;
         
+        // ************************************************************
+        // ** MODIFICACIÓN CLAVE: ELIMINAR EL TEXTO DEL ÚLTIMO MENSAJE **
+        // ************************************************************
         item.innerHTML = `
-            <div class="contact-avatar ${isOnline ? 'online' : ''}"></div> <div class="chat-details">
+            <div class="contact-avatar ${isOnline ? 'online' : ''}"></div> 
+            <div class="chat-details">
                 <span class="chat-name">${contact.username}</span>
-                <p class="last-message">${contact.lastMessage ? (contact.lastMessage.substring(0, 30) + (contact.lastMessage.length > 30 ? '...' : '')) : 'Nueva conversación'}</p>
+                <p class="last-message">
+                    ${contact.unread > 0 ? `<span class="unread-count-placeholder">Mensajes nuevos</span>` : '&nbsp;'}
+                </p>
             </div>
             <div class="chat-meta">
                 <span class="last-time">${formatTimeForList(contact.timestamp)}</span>
@@ -426,6 +439,16 @@ onChildAdded(messagesRef, (snapshot) => {
     const interactionPartner = caseInsensitiveEquals(message.sender, currentUser) ? message.receiver : message.sender;
 
     if(!interactionPartner || caseInsensitiveEquals(interactionPartner, currentUser)) return;
+    
+    // ************************************************************
+    // ** VERIFICACIÓN CLAVE: Solo procesar si es un mensaje directo **
+    // ************************************************************
+    const isDirectMessage = 
+        (caseInsensitiveEquals(message.sender, currentUser) && caseInsensitiveEquals(message.receiver, interactionPartner)) ||
+        (caseInsensitiveEquals(message.sender, interactionPartner) && caseInsensitiveEquals(message.receiver, currentUser));
+    
+    if(!isDirectMessage) return; // Ignorar si no es un mensaje directo.
+
 
     // 2. ACTUALIZAR LISTA DE CONTACTOS DINÁMICAMENTE (usando CONTACTS_MAP)
     let contact = CONTACTS_MAP[interactionPartner];
@@ -434,7 +457,7 @@ onChildAdded(messagesRef, (snapshot) => {
         const status = USERS_STATUS[interactionPartner] || {};
         contact = {
             username: interactionPartner,
-            lastMessage: message.text,
+            // YA NO SE ALMACENA lastMessage AQUÍ
             timestamp: message.timestamp || Date.now(),
             unread: caseInsensitiveEquals(message.sender, currentUser) ? 0 : 1, 
             lastSeen: status.lastSeen || null,
@@ -442,7 +465,7 @@ onChildAdded(messagesRef, (snapshot) => {
         };
         CONTACTS_MAP[interactionPartner] = contact;
     } else {
-        contact.lastMessage = message.text;
+        // YA NO SE ACTUALIZA lastMessage AQUÍ
         contact.timestamp = message.timestamp || Date.now();
         
         if (!caseInsensitiveEquals(message.sender, currentUser) && 
@@ -539,7 +562,12 @@ onChildChanged(messagesRef, (snapshot) => {
         }
     }
     
-    if (interactionPartner && CONTACTS_MAP[interactionPartner]) {
+    // Solo actualizar el estado de no leídos en la lista si el mensaje es directo
+    const isDirectMessage = 
+        (caseInsensitiveEquals(messageData.sender, currentUser) && caseInsensitiveEquals(messageData.receiver, interactionPartner)) ||
+        (caseInsensitiveEquals(messageData.sender, interactionPartner) && caseInsensitiveEquals(messageData.receiver, currentUser));
+        
+    if (isDirectMessage && interactionPartner && CONTACTS_MAP[interactionPartner]) {
          const contact = CONTACTS_MAP[interactionPartner];
          
          const { unreadCount } = getLatestConversationData(interactionPartner);
@@ -571,7 +599,8 @@ onChildRemoved(messagesRef, (snapshot) => {
     const messageElement = document.getElementById(messageId);
     if (messageElement) messageElement.remove();
     
-    renderConversationsList();
+    // Necesario re-renderizar para actualizar el 'lastMessage' de la lista (aunque ahora no mostramos el texto)
+    renderConversationsList(); 
 });
 
 // --------------------------------------------------------------------------
@@ -757,7 +786,7 @@ if (clearAllButton) {
                     loadedMessageCount = 0;
                     
                     for (const user in CONTACTS_MAP) {
-                        CONTACTS_MAP[user].lastMessage = 'Chat reiniciado';
+                        // YA NO HAY lastMessage AQUÍ
                         CONTACTS_MAP[user].timestamp = Date.now();
                         CONTACTS_MAP[user].unread = 0;
                     }
@@ -842,7 +871,7 @@ function createMessageElement(messageId, message) {
         const quoteUser = document.createElement('strong');
         quoteUser.textContent = message.replyTo.sender;
         const quoteText = document.createElement('p');
-        quoteText.textContent = message.replyTo.text.length > 50 ? message.replyTo.text.substring(0, 50) + '...' : message.replyTo.text;
+        quoteText.textContent = message.replyTo.text.length > 50 ? message.replyTo.text.substring(0, 50) + '...' : message.replyTo.text; // Corregido: usar message.text
         quoteDiv.appendChild(quoteUser);
         quoteDiv.appendChild(quoteText);
         messageContentDiv.appendChild(quoteDiv);
@@ -914,7 +943,7 @@ function createMessageActions(messageId, message) {
         const replyText = document.getElementById('reply-text');
         if (replyUser && replyText && replyPreview) {
             replyUser.textContent = message.sender;
-            replyText.textContent = message.text.length > 50 ? message.replyTo.text.substring(0, 50) + '...' : message.text; 
+            replyText.textContent = message.text.length > 50 ? message.text.substring(0, 50) + '...' : message.text; // Corregido: usar message.text
             replyPreview.style.display = 'flex';
         }
         if (messageInput) messageInput.focus();
@@ -975,7 +1004,9 @@ function addReactions(container, messageId, reactions) {
     container.innerHTML = '';
     if (!reactions) return;
     const reactionCounts = {};
-    const userReacted = reactions[currentUser];
+    
+    // Identificar si el usuario actual ha reaccionado y con qué emoji
+    const userReactedEmoji = reactions[currentUser];
 
     for (const userId in reactions) {
         const emoji = reactions[userId];
@@ -984,7 +1015,10 @@ function addReactions(container, messageId, reactions) {
     for (const emoji in reactionCounts) {
         const count = reactionCounts[emoji];
         const reactionSpan = document.createElement('span');
-        reactionSpan.className = `reaction-badge ${userReacted === emoji ? 'user-reacted' : ''}`;
+        // Marcar como 'user-reacted' solo si el usuario actual usó ESTE emoji
+        const isUserReacted = userReactedEmoji === emoji; 
+        
+        reactionSpan.className = `reaction-badge ${isUserReacted ? 'user-reacted' : ''}`;
         
         reactionSpan.innerHTML = `${emoji} <span class="reaction-count">${count}</span>`;
 
@@ -1144,25 +1178,32 @@ function loadMessages(isInitialLoad = false) {
              addLoadMoreIndicator(); 
         }
         
+        // Almacenar temporalmente los elementos creados para la inserción
+        const newElements = [];
+        
         batchIds.forEach(id => {
             const msg = allMessages[id];
             const messageElement = createMessageElement(id, msg);
-            if (chatMessages) {
-                const loadIndicator = document.getElementById('load-more-indicator');
-                // Insertar antes del primer mensaje actual o después del indicador de carga
-                if (loadIndicator) {
-                     // Insertar después del indicador (que está en la parte superior)
-                     chatMessages.insertBefore(messageElement, loadIndicator.nextSibling); 
-                } else {
-                     // Si no hay indicador, simplemente preponemos
-                     chatMessages.prepend(messageElement);
-                }
-            }
+            newElements.push(messageElement);
             
             if (caseInsensitiveEquals(msg.sender, currentUser) && msg.read && msg.readAt) {
-                updateSeenIndicator(messageElement, msg.readAt, id);
+                // Configurar el indicador de visto si es un mensaje enviado
+                updateSeenIndicator(messageElement, msg.readAt, id); 
             }
         });
+        
+        // Insertar todos los nuevos elementos en la parte superior del chat
+        if (chatMessages) {
+             const loadIndicator = document.getElementById('load-more-indicator');
+             const insertionPoint = loadIndicator ? loadIndicator.nextSibling : chatMessages.firstChild;
+             
+             newElements.forEach(element => {
+                 chatMessages.insertBefore(element, insertionPoint);
+                 // Importante: configurar las acciones después de insertarlo en el DOM
+                 const actionsDiv = element.querySelector('.message-actions');
+                 if (actionsDiv) setupMessageActions(element, actionsDiv); 
+             });
+        }
 
         loadedMessageCount += batchIds.length;
         
