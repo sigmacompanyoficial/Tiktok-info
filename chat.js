@@ -70,7 +70,6 @@ let activeChatUser = null;
 let USERS_STATUS = {}; 
 let CONTACTS_MAP = {}; 
 let isTypingActive = false; 
-let CHAT_KEYS = {}; // Para almacenar las claves de cifrado
 
 // NUEVAS VARIABLES PARA PAGINACIÓN Y OPTIMIZACIÓN
 const MESSAGES_PER_PAGE = 15; // Lote de 15 mensajes
@@ -79,112 +78,7 @@ let loadedMessageCount = 0; // Número de mensajes cargados actualmente
 let isLoadingMore = false; // Bandera para evitar múltiples cargas
 
 
-// --- 4. FUNCIONES DE CRIPTOGRAFÍA ---
-
-// Obtiene un ID consistente para derivar la clave (ej: "alice:bob")
-function getChatKeyIdentifier(user1, user2) {
-    const users = [user1.toLowerCase(), user2.toLowerCase()].sort();
-    return users.join(':'); 
-}
-
-// Deriva una clave AES-GCM 256 de una frase de clave (el ID del chat)
-async function deriveKey(keyIdentifier) {
-    const encoder = new TextEncoder();
-    
-    // Importar la frase clave como material para PBKDF2
-    const material = await crypto.subtle.importKey(
-        'raw', 
-        encoder.encode(keyIdentifier), 
-        { name: 'PBKDF2' }, 
-        false, 
-        ['deriveKey']
-    );
-    
-    // Usar un salt fijo (en producción se usaría un salt único para cada par)
-    const salt = encoder.encode('sigma-chat-salt'); 
-
-    return crypto.subtle.deriveKey(
-        {
-            name: 'PBKDF2',
-            salt: salt,
-            iterations: 100000, 
-            hash: 'SHA-256',
-        },
-        material,
-        { name: 'AES-GCM', length: 256 },
-        true,
-        ['encrypt', 'decrypt']
-    );
-}
-
-// Cifra el texto con la clave
-async function encrypt(text, key) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(text);
-    
-    // Vector de inicialización (IV): DEBE ser aleatorio y único para cada mensaje.
-    const iv = crypto.getRandomValues(new Uint8Array(12)); 
-
-    const ciphertext = await crypto.subtle.encrypt(
-        { name: 'AES-GCM', iv: iv },
-        key,
-        data
-    );
-
-    // Devolver el texto cifrado y el IV en Base64 para almacenarlos en Firebase
-    return {
-        text: btoa(String.fromCharCode(...new Uint8Array(ciphertext))),
-        iv: btoa(String.fromCharCode(...iv)),
-    };
-}
-
-// Descifra el texto con la clave y el IV
-async function decrypt(encryptedText, ivBase64, key) {
-    try {
-        // Convertir Base64 de vuelta a ArrayBuffer
-        const ciphertext = new Uint8Array(atob(encryptedText).split('').map(char => char.charCodeAt(0))).buffer;
-        const iv = new Uint8Array(atob(ivBase64).split('').map(char => char.charCodeAt(0)));
-
-        const decryptedData = await crypto.subtle.decrypt(
-            { name: 'AES-GCM', iv: iv },
-            key,
-            ciphertext
-        );
-
-        const decoder = new TextDecoder();
-        return decoder.decode(decryptedData);
-    } catch (e) {
-        // Si no se puede descifrar (clave incorrecta, datos corruptos), devolver aviso.
-        return `[ERROR: Mensaje cifrado. No se pudo descifrar.]`;
-    }
-}
-
-// Función central para descifrar un objeto de mensaje
-async function processMessageForDisplay(message) {
-    // Si no está marcado como cifrado o le faltan partes, devolver tal cual
-    if (!message.encrypted || !message.text || !message.iv) {
-        return { ...message, text: message.text || '[Mensaje vacío o no cifrado]' };
-    }
-    
-    // 1. Obtener la clave
-    const keyId = getChatKeyIdentifier(message.sender, message.receiver);
-    let chatKey = CHAT_KEYS[keyId];
-
-    if (!chatKey) {
-        // Derivar la clave si no la tenemos
-        chatKey = await deriveKey(keyId);
-        CHAT_KEYS[keyId] = chatKey;
-    }
-
-    // 2. Descifrar
-    const decryptedText = await decrypt(message.text, message.iv, chatKey);
-    
-    // 3. Devolver el mensaje con el texto descifrado
-    return { ...message, text: decryptedText };
-}
-
-
-// --- 5. FUNCIONES DE UTILIDAD ---
+// --- FUNCIONES DE UTILIDAD ---
 
 const caseInsensitiveEquals = (str1, str2) => {
     if (!str1 || !str2) return str1 === str2;
@@ -208,7 +102,7 @@ function getTimeAgo(timestamp) {
 }
 
 
-// Esta función no necesita descifrar, ya que solo necesita metadatos (timestamp, read)
+// Función para obtener el último mensaje y el conteo de no leídos para un contacto específico
 function getLatestConversationData(partner) {
     let latestMessage = null;
     let latestTimestamp = 0;
@@ -217,6 +111,7 @@ function getLatestConversationData(partner) {
     for (const id in allMessages) {
         const msg = allMessages[id];
         
+        // La condición de relevancia asegura que solo se consideren mensajes directos
         const isRelevant = 
             (caseInsensitiveEquals(msg.sender, currentUser) && caseInsensitiveEquals(msg.receiver, partner)) ||
             (caseInsensitiveEquals(msg.sender, partner) && caseInsensitiveEquals(msg.receiver, currentUser));
@@ -237,11 +132,12 @@ function getLatestConversationData(partner) {
         }
     }
     
+    // Devolvemos el texto solo si es necesario, pero en este caso solo necesitamos timestamp y unreadCount para la lista.
     return { latestMessage, latestTimestamp, unreadCount };
 }
 
 
-// --- 6. GESTIÓN DE AUTENTICACIÓN Y NAVEGACIÓN ---
+// --- 4. GESTIÓN DE AUTENTICACIÓN Y NAVEGACIÓN ---
 if (!currentUser) {
     window.location.href = 'nnn.html'; 
 } else {
@@ -262,6 +158,7 @@ function setupUserPresence() {
         lastSeen: serverTimestamp() 
     });
     
+    // Escuchar cambios en el estado de los usuarios (y poblar la lista de contactos)
     onValue(usersRef, (snapshot) => {
         USERS_STATUS = {};
         const tempUsersMap = {}; 
@@ -275,9 +172,11 @@ function setupUserPresence() {
                     
                     const { latestMessage, latestTimestamp, unreadCount } = getLatestConversationData(username);
                     
+                    // Solo incluir en la lista si hay un mensaje o si es un usuario conocido (que se haya conectado alguna vez)
                     if (latestMessage || status.isOnline) { 
                         tempUsersMap[username] = {
                             username: username,
+                            // QUITAMOS lastMessage PARA QUE NO APAREZCA EN LA LISTA
                             timestamp: latestTimestamp || status.lastSeen || Date.now(),
                             unread: unreadCount,
                         };
@@ -360,7 +259,7 @@ if (chatHeader) {
 }
 
 // ------------------------------------------------------------------
-// --- 7. LÓGICA DE LA LISTA DE CONVERSACIONES ---
+// --- 5. LÓGICA DE LA LISTA DE CONVERSACIONES ---
 // ------------------------------------------------------------------
 
 function formatTimeForList(timestamp) {
@@ -389,6 +288,9 @@ function renderConversationsList() {
     sortedContacts.forEach(contact => {
         if (caseInsensitiveEquals(contact.username, currentUser)) return;
 
+        // Si el contacto ya existe en CONTACTS_MAP, usamos sus datos.
+        // Si no existe, es un error, pero el bucle anterior ya lo gestionó.
+        // Recalculamos por si acaso
         if (contact.unread === undefined) { 
              const latestData = getLatestConversationData(contact.username);
              contact.timestamp = latestData.latestTimestamp || contact.timestamp;
@@ -403,7 +305,9 @@ function renderConversationsList() {
         const status = USERS_STATUS[contact.username];
         const isOnline = status && status.isOnline;
         
-        // MODIFICACIÓN: Solo mostrar el número de no leídos (o un espacio)
+        // ************************************************************
+        // ** MODIFICACIÓN CLAVE: ELIMINAR EL TEXTO DEL ÚLTIMO MENSAJE **
+        // ************************************************************
         item.innerHTML = `
             <div class="contact-avatar ${isOnline ? 'online' : ''}"></div> 
             <div class="chat-details">
@@ -448,11 +352,13 @@ function setActiveChat(username) {
 
     if (chatMessages) {
         chatMessages.innerHTML = '';
+        // CORRECCIÓN PARA PAGINACIÓN: Asegurar que el listener se añade una sola vez.
         chatMessages.removeEventListener('scroll', handleChatScroll); 
         chatMessages.addEventListener('scroll', handleChatScroll);
     }
     
     // --- LÓGICA DE PAGINACIÓN ---
+    // 1. OBTENER Y ORDENAR TODOS LOS MENSAJES RELEVANTES
     chatMessageIds = [];
     for (const id in allMessages) {
         const msg = allMessages[id];
@@ -469,18 +375,22 @@ function setActiveChat(username) {
     chatMessageIds.sort((a, b) => a.timestamp - b.timestamp);
     chatMessageIds = chatMessageIds.map(item => item.id);
     
-    loadedMessageCount = 0; 
+    loadedMessageCount = 0; // Resetear contador
 
+    // 2. CARGAR EL LOTE INICIAL (los últimos MESSAGES_PER_PAGE mensajes)
     loadMessages(true);
     // --- FIN LÓGICA DE PAGINACIÓN ---
     
+    // 1. Resetear contador de no leídos y re-renderizar la lista
     if (CONTACTS_MAP[username]) {
          CONTACTS_MAP[username].unread = 0;
          renderConversationsList();
     }
     
+    // 2. Actualizar el estado del contacto en el encabezado
     updateChatHeaderStatus();
     
+    // 3. APLAZAR MARCAJE COMO LEÍDO (Mantener la lógica de estabilidad)
     setTimeout(() => {
         let updates = {};
         let readPerformed = false;
@@ -506,16 +416,17 @@ function setActiveChat(username) {
         }
     }, 50); 
     
+    // 4. Reiniciar el indicador de typing para el nuevo chat
     clearTimeout(typingTimeout);
     isTypingActive = false; 
     typingTimeout = null;
 }
 
 // --------------------------------------------------------------------------
-// --- 8. GESTIÓN DE MENSAJES EN TIEMPO REAL (onChildAdded, onChildChanged) ---
+// --- 6. GESTIÓN DE MENSAJES EN TIEMPO REAL (onChildAdded, onChildChanged) ---
 // --------------------------------------------------------------------------
 
-onChildAdded(messagesRef, async (snapshot) => { 
+onChildAdded(messagesRef, (snapshot) => {
     const messageId = snapshot.key;
     const message = snapshot.val();
     
@@ -529,11 +440,15 @@ onChildAdded(messagesRef, async (snapshot) => {
 
     if(!interactionPartner || caseInsensitiveEquals(interactionPartner, currentUser)) return;
     
+    // ************************************************************
+    // ** VERIFICACIÓN CLAVE: Solo procesar si es un mensaje directo **
+    // ************************************************************
     const isDirectMessage = 
         (caseInsensitiveEquals(message.sender, currentUser) && caseInsensitiveEquals(message.receiver, interactionPartner)) ||
         (caseInsensitiveEquals(message.sender, interactionPartner) && caseInsensitiveEquals(message.receiver, currentUser));
     
-    if(!isDirectMessage) return; 
+    if(!isDirectMessage) return; // Ignorar si no es un mensaje directo.
+
 
     // 2. ACTUALIZAR LISTA DE CONTACTOS DINÁMICAMENTE (usando CONTACTS_MAP)
     let contact = CONTACTS_MAP[interactionPartner];
@@ -542,6 +457,7 @@ onChildAdded(messagesRef, async (snapshot) => {
         const status = USERS_STATUS[interactionPartner] || {};
         contact = {
             username: interactionPartner,
+            // YA NO SE ALMACENA lastMessage AQUÍ
             timestamp: message.timestamp || Date.now(),
             unread: caseInsensitiveEquals(message.sender, currentUser) ? 0 : 1, 
             lastSeen: status.lastSeen || null,
@@ -549,6 +465,7 @@ onChildAdded(messagesRef, async (snapshot) => {
         };
         CONTACTS_MAP[interactionPartner] = contact;
     } else {
+        // YA NO SE ACTUALIZA lastMessage AQUÍ
         contact.timestamp = message.timestamp || Date.now();
         
         if (!caseInsensitiveEquals(message.sender, currentUser) && 
@@ -568,21 +485,26 @@ onChildAdded(messagesRef, async (snapshot) => {
         if (isRelevant) {
             const index = chatMessageIds.findIndex(item => item === messageId);
             
+            // Si el mensaje no está en la lista del chat activo, lo añadimos.
             if (index === -1) {
                 chatMessageIds.push(messageId);
+                // ¡IMPORTANTE! Reordenamos la lista de IDs para que el nuevo mensaje esté al final
                 chatMessageIds.sort((a, b) => (allMessages[a].timestamp || 0) - (allMessages[b].timestamp || 0));
             }
             
+            // Obtenemos el nuevo índice después de ordenar.
             const messageIndex = chatMessageIds.findIndex(id => id === messageId);
             const isLatestMessage = messageIndex === chatMessageIds.length - 1;
 
+            // Solo renderizamos y aumentamos loadedMessageCount si es el mensaje más nuevo en tiempo real,
+            // y no ha sido cargado ya.
             if (isLatestMessage && !document.getElementById(messageId)) {
                 
                 loadedMessageCount++;
                 
                 const isNearBottom = chatMessages.scrollHeight - chatMessages.clientHeight <= chatMessages.scrollTop + 200;
                 
-                await renderAndAppendMessage(messageId, message); // << LLAMADA ASÍNCRONA
+                renderAndAppendMessage(messageId, message); 
 
                 if (!caseInsensitiveEquals(message.sender, currentUser) && !message.read) {
                      setTimeout(() => {
@@ -601,7 +523,7 @@ onChildAdded(messagesRef, async (snapshot) => {
     }
 });
 
-onChildChanged(messagesRef, async (snapshot) => { 
+onChildChanged(messagesRef, (snapshot) => {
     const messageId = snapshot.key;
     const messageData = snapshot.val();
     allMessages[messageId] = messageData; 
@@ -624,10 +546,7 @@ onChildChanged(messagesRef, async (snapshot) => {
                  }
                  oldMessageElement.remove();
                  
-                 // Descifrar antes de crear el elemento
-                 const decryptedMessage = await processMessageForDisplay(messageData); 
-
-                 const newMessageWrapper = createMessageElement(messageId, decryptedMessage);
+                 const newMessageWrapper = createMessageElement(messageId, messageData);
                  if (nextSibling) {
                      parent.insertBefore(newMessageWrapper, nextSibling);
                  } else {
@@ -643,6 +562,7 @@ onChildChanged(messagesRef, async (snapshot) => {
         }
     }
     
+    // Solo actualizar el estado de no leídos en la lista si el mensaje es directo
     const isDirectMessage = 
         (caseInsensitiveEquals(messageData.sender, currentUser) && caseInsensitiveEquals(messageData.receiver, interactionPartner)) ||
         (caseInsensitiveEquals(messageData.sender, interactionPartner) && caseInsensitiveEquals(messageData.receiver, currentUser));
@@ -666,6 +586,7 @@ onChildRemoved(messagesRef, (snapshot) => {
     const index = chatMessageIds.findIndex(id => id === messageId);
     if (index !== -1) {
         chatMessageIds.splice(index, 1);
+        // Solo decrementamos si el mensaje estaba actualmente cargado en el DOM
         if (document.getElementById(messageId)) {
              loadedMessageCount--;
         }
@@ -678,15 +599,16 @@ onChildRemoved(messagesRef, (snapshot) => {
     const messageElement = document.getElementById(messageId);
     if (messageElement) messageElement.remove();
     
+    // Necesario re-renderizar para actualizar el 'lastMessage' de la lista (aunque ahora no mostramos el texto)
     renderConversationsList(); 
 });
 
 // --------------------------------------------------------------------------
-// --- 9. ENVÍO DE MENSAJES Y FUNCIONES AUXILIARES (MODIFICADA PARA CIFRADO)---
+// --- 7. ENVÍO DE MENSAJES Y FUNCIONES AUXILIARES (Sin cambios estructurales en esta sección)---
 // --------------------------------------------------------------------------
 
 if (messageForm && messageInput) {
-    messageForm.addEventListener('submit', async (e) => { 
+    messageForm.addEventListener('submit', (e) => {
         e.preventDefault();
         const messageText = messageInput.value.trim();
         
@@ -696,27 +618,10 @@ if (messageForm && messageInput) {
             return;
         }
 
-        // 1. Obtener/derivar la clave de cifrado
-        const keyId = getChatKeyIdentifier(currentUser, activeChatUser);
-        let chatKey = CHAT_KEYS[keyId];
-
-        if (!chatKey) {
-            chatKey = await deriveKey(keyId);
-            CHAT_KEYS[keyId] = chatKey;
-        }
-        
-        // 2. Cifrar el texto
-        const encrypted = await encrypt(messageText, chatKey);
-
         const newMessage = {
             sender: currentUser,
             receiver: activeChatUser, 
-            
-            // GUARDAR DATOS CIFRADOS EN FIREBASE
-            text: encrypted.text, 
-            iv: encrypted.iv,     
-            encrypted: true,      // Marcador para saber que está cifrado
-            
+            text: messageText,
             timestamp: serverTimestamp(),
             read: false, 
             reactions: {},
@@ -881,6 +786,7 @@ if (clearAllButton) {
                     loadedMessageCount = 0;
                     
                     for (const user in CONTACTS_MAP) {
+                        // YA NO HAY lastMessage AQUÍ
                         CONTACTS_MAP[user].timestamp = Date.now();
                         CONTACTS_MAP[user].unread = 0;
                     }
@@ -965,7 +871,7 @@ function createMessageElement(messageId, message) {
         const quoteUser = document.createElement('strong');
         quoteUser.textContent = message.replyTo.sender;
         const quoteText = document.createElement('p');
-        quoteText.textContent = message.replyTo.text.length > 50 ? message.replyTo.text.substring(0, 50) + '...' : message.replyTo.text; 
+        quoteText.textContent = message.replyTo.text.length > 50 ? message.replyTo.text.substring(0, 50) + '...' : message.replyTo.text; // Corregido: usar message.text
         quoteDiv.appendChild(quoteUser);
         quoteDiv.appendChild(quoteText);
         messageContentDiv.appendChild(quoteDiv);
@@ -1006,17 +912,9 @@ function createMessageElement(messageId, message) {
     return messageWrapper;
 }
 
-async function renderAndAppendMessage(messageId, message) { // ASÍNCRONA
-    // 1. Procesar el mensaje (descifrar)
-    const decryptedMessage = await processMessageForDisplay(message);
-    
-    // 2. Crear el elemento con el mensaje descifrado
-    const messageWrapper = createMessageElement(messageId, decryptedMessage);
-    
-    // 3. Añadir al DOM
+function renderAndAppendMessage(messageId, message) {
+    const messageWrapper = createMessageElement(messageId, message);
     if (chatMessages) chatMessages.appendChild(messageWrapper);
-    
-    // 4. Configurar acciones
     const actionsDiv = messageWrapper.querySelector('.message-actions');
     setupMessageActions(messageWrapper, actionsDiv); 
 }
@@ -1045,7 +943,7 @@ function createMessageActions(messageId, message) {
         const replyText = document.getElementById('reply-text');
         if (replyUser && replyText && replyPreview) {
             replyUser.textContent = message.sender;
-            replyText.textContent = message.text.length > 50 ? message.text.substring(0, 50) + '...' : message.text; 
+            replyText.textContent = message.text.length > 50 ? message.text.substring(0, 50) + '...' : message.text; // Corregido: usar message.text
             replyPreview.style.display = 'flex';
         }
         if (messageInput) messageInput.focus();
@@ -1107,6 +1005,7 @@ function addReactions(container, messageId, reactions) {
     if (!reactions) return;
     const reactionCounts = {};
     
+    // Identificar si el usuario actual ha reaccionado y con qué emoji
     const userReactedEmoji = reactions[currentUser];
 
     for (const userId in reactions) {
@@ -1116,6 +1015,7 @@ function addReactions(container, messageId, reactions) {
     for (const emoji in reactionCounts) {
         const count = reactionCounts[emoji];
         const reactionSpan = document.createElement('span');
+        // Marcar como 'user-reacted' solo si el usuario actual usó ESTE emoji
         const isUserReacted = userReactedEmoji === emoji; 
         
         reactionSpan.className = `reaction-badge ${isUserReacted ? 'user-reacted' : ''}`;
@@ -1175,7 +1075,7 @@ function closeAllMessageActions(excludeWrapper = null) {
 
 
 // ------------------------------------------------------------------
-// --- 10. LÓGICA DE PAGINACIÓN DE MENSAJES (CARGA PEREZOSA) ---
+// --- 8. LÓGICA DE PAGINACIÓN DE MENSAJES (CARGA PEREZOSA) ---
 // ------------------------------------------------------------------
 
 function addLoadMoreIndicator() {
@@ -1223,7 +1123,7 @@ function hideLoadingIndicator() {
 }
 
 
-async function loadMessages(isInitialLoad = false) { 
+function loadMessages(isInitialLoad = false) {
     if (isLoadingMore || loadedMessageCount >= chatMessageIds.length) {
         removeLoadMoreIndicator();
         return;
@@ -1236,15 +1136,16 @@ async function loadMessages(isInitialLoad = false) {
     let batchIds = [];
     
     if (isInitialLoad) {
+        // Carga inicial: los últimos MESSAGES_PER_PAGE mensajes (los más recientes)
         const startIndex = Math.max(0, totalMessages - MESSAGES_PER_PAGE);
         batchIds = chatMessageIds.slice(startIndex);
         
         if(chatMessages) chatMessages.innerHTML = ''; 
         
         // Renderizar y añadir al final del chatMessages
-        for (const id of batchIds) { 
-            await renderAndAppendMessage(id, allMessages[id]);
-        }
+        batchIds.forEach(id => {
+            renderAndAppendMessage(id, allMessages[id]);
+        });
         
         loadedMessageCount = batchIds.length;
         
@@ -1254,6 +1155,8 @@ async function loadMessages(isInitialLoad = false) {
              removeLoadMoreIndicator();
         }
 
+        // CORRECCIÓN CLAVE: Scroll al final para ver los mensajes más recientes.
+        // Un pequeño retraso para garantizar el renderizado.
         if (chatMessages && loadedMessageCount > 0) {
             setTimeout(() => {
                 chatMessages.scrollTop = chatMessages.scrollHeight;
@@ -1261,6 +1164,8 @@ async function loadMessages(isInitialLoad = false) {
         }
         
     } else { 
+        // Carga al hacer scroll: lote de mensajes anteriores (antiguos)
+        
         const oldScrollHeight = chatMessages.scrollHeight;
         
         const endIndex = totalMessages - loadedMessageCount; 
@@ -1268,30 +1173,33 @@ async function loadMessages(isInitialLoad = false) {
         
         batchIds = chatMessageIds.slice(startIndex, endIndex);
         
+        // Primero añadir el indicador antes de cargar
         if (startIndex > 0) {
              addLoadMoreIndicator(); 
         }
         
+        // Almacenar temporalmente los elementos creados para la inserción
         const newElements = [];
         
-        for (const id of batchIds) { 
+        batchIds.forEach(id => {
             const msg = allMessages[id];
-            // Descifrar antes de crear el elemento
-            const decryptedMsg = await processMessageForDisplay(msg); 
-            const messageElement = createMessageElement(id, decryptedMsg);
+            const messageElement = createMessageElement(id, msg);
             newElements.push(messageElement);
             
             if (caseInsensitiveEquals(msg.sender, currentUser) && msg.read && msg.readAt) {
+                // Configurar el indicador de visto si es un mensaje enviado
                 updateSeenIndicator(messageElement, msg.readAt, id); 
             }
-        }
+        });
         
+        // Insertar todos los nuevos elementos en la parte superior del chat
         if (chatMessages) {
              const loadIndicator = document.getElementById('load-more-indicator');
              const insertionPoint = loadIndicator ? loadIndicator.nextSibling : chatMessages.firstChild;
              
              newElements.forEach(element => {
                  chatMessages.insertBefore(element, insertionPoint);
+                 // Importante: configurar las acciones después de insertarlo en el DOM
                  const actionsDiv = element.querySelector('.message-actions');
                  if (actionsDiv) setupMessageActions(element, actionsDiv); 
              });
@@ -1299,6 +1207,7 @@ async function loadMessages(isInitialLoad = false) {
 
         loadedMessageCount += batchIds.length;
         
+        // Ajustar el scroll para mantener la posición del usuario
         if (chatMessages) {
             const newScrollHeight = chatMessages.scrollHeight;
             chatMessages.scrollTop = newScrollHeight - oldScrollHeight;
@@ -1313,6 +1222,7 @@ function handleChatScroll() {
     if (isLoadingMore || loadedMessageCount >= chatMessageIds.length) return;
 
     if (chatMessages && chatMessages.scrollTop < 10) {
+        // Retraso para evitar múltiples llamadas
         setTimeout(() => {
             if (chatMessages.scrollTop < 10) {
                  loadMessages(false);
