@@ -461,29 +461,40 @@ onChildAdded(messagesRef, (snapshot) => {
 
         if (isRelevant) {
             const index = chatMessageIds.findIndex(item => item === messageId);
+            
+            // Si el mensaje no está en la lista del chat activo, lo añadimos.
             if (index === -1) {
                 chatMessageIds.push(messageId);
+                // ¡IMPORTANTE! Reordenamos la lista de IDs para que el nuevo mensaje esté al final
+                chatMessageIds.sort((a, b) => (allMessages[a].timestamp || 0) - (allMessages[b].timestamp || 0));
             }
             
-            if (document.getElementById(messageId)) return;
-            
-            loadedMessageCount++;
-            
-            const isNearBottom = chatMessages.scrollHeight - chatMessages.clientHeight <= chatMessages.scrollTop + 200;
-            
-            renderAndAppendMessage(messageId, message); 
+            // Obtenemos el nuevo índice después de ordenar.
+            const messageIndex = chatMessageIds.findIndex(id => id === messageId);
+            const isLatestMessage = messageIndex === chatMessageIds.length - 1;
 
-            if (!caseInsensitiveEquals(message.sender, currentUser) && !message.read) {
-                 setTimeout(() => {
-                     if (caseInsensitiveEquals(interactionPartner, activeChatUser)) {
-                         set(ref(database, `messages/${messageId}/read`), true);
-                         set(ref(database, `messages/${messageId}/readAt`), Date.now());
-                     }
-                 }, 500); 
-            }
-            
-            if (chatMessages && isNearBottom) {
-                chatMessages.scrollTop = chatMessages.scrollHeight;
+            // Solo renderizamos y aumentamos loadedMessageCount si es el mensaje más nuevo en tiempo real,
+            // y no ha sido cargado ya.
+            if (isLatestMessage && !document.getElementById(messageId)) {
+                
+                loadedMessageCount++;
+                
+                const isNearBottom = chatMessages.scrollHeight - chatMessages.clientHeight <= chatMessages.scrollTop + 200;
+                
+                renderAndAppendMessage(messageId, message); 
+
+                if (!caseInsensitiveEquals(message.sender, currentUser) && !message.read) {
+                     setTimeout(() => {
+                         if (caseInsensitiveEquals(interactionPartner, activeChatUser)) {
+                             set(ref(database, `messages/${messageId}/read`), true);
+                             set(ref(database, `messages/${messageId}/readAt`), Date.now());
+                         }
+                     }, 500); 
+                }
+                
+                if (chatMessages && isNearBottom) {
+                    chatMessages.scrollTop = chatMessages.scrollHeight;
+                }
             }
         }
     }
@@ -547,6 +558,7 @@ onChildRemoved(messagesRef, (snapshot) => {
     const index = chatMessageIds.findIndex(id => id === messageId);
     if (index !== -1) {
         chatMessageIds.splice(index, 1);
+        // Solo decrementamos si el mensaje estaba actualmente cargado en el DOM
         if (document.getElementById(messageId)) {
              loadedMessageCount--;
         }
@@ -902,7 +914,7 @@ function createMessageActions(messageId, message) {
         const replyText = document.getElementById('reply-text');
         if (replyUser && replyText && replyPreview) {
             replyUser.textContent = message.sender;
-            replyText.textContent = message.text.length > 50 ? message.text.substring(0, 50) + '...' : message.text; 
+            replyText.textContent = message.text.length > 50 ? message.replyTo.text.substring(0, 50) + '...' : message.text; 
             replyPreview.style.display = 'flex';
         }
         if (messageInput) messageInput.focus();
@@ -1127,16 +1139,22 @@ function loadMessages(isInitialLoad = false) {
         
         batchIds = chatMessageIds.slice(startIndex, endIndex);
         
-        addLoadMoreIndicator(); 
+        // Primero añadir el indicador antes de cargar
+        if (startIndex > 0) {
+             addLoadMoreIndicator(); 
+        }
         
         batchIds.forEach(id => {
             const msg = allMessages[id];
             const messageElement = createMessageElement(id, msg);
             if (chatMessages) {
                 const loadIndicator = document.getElementById('load-more-indicator');
+                // Insertar antes del primer mensaje actual o después del indicador de carga
                 if (loadIndicator) {
-                     chatMessages.insertBefore(messageElement, loadIndicator.nextSibling);
+                     // Insertar después del indicador (que está en la parte superior)
+                     chatMessages.insertBefore(messageElement, loadIndicator.nextSibling); 
                 } else {
+                     // Si no hay indicador, simplemente preponemos
                      chatMessages.prepend(messageElement);
                 }
             }
