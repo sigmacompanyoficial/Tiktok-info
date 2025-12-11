@@ -253,7 +253,7 @@ if (chatHeader) {
          backButton.onclick = () => {
             if (chatRoomPanel) chatRoomPanel.classList.remove('active');
             closeAllMessageActions();
-            if (emojiPickerContainer) emojiPickerContainer.classList.remove('active');
+            if (emojiPickerContainer) emojiPickerPickerContainer.classList.remove('active');
         };
     }
 }
@@ -604,7 +604,7 @@ onChildRemoved(messagesRef, (snapshot) => {
 });
 
 // --------------------------------------------------------------------------
-// --- 7. ENVÍO DE MENSAJES Y FUNCIONES AUXILIARES (Sin cambios estructurales en esta sección)---
+// --- 7. ENVÍO DE MENSAJES Y FUNCIONES AUXILIARES (Modificado para NO cifrar)---
 // --------------------------------------------------------------------------
 
 if (messageForm && messageInput) {
@@ -618,14 +618,18 @@ if (messageForm && messageInput) {
             return;
         }
 
+        // ******** INICIO DE MODIFICACIÓN: Envío de texto plano ********
+        // Se envía el texto del mensaje sin cifrar.
+        // Se eliminan los campos 'encrypted' e 'iv' de la estructura del mensaje.
         const newMessage = {
             sender: currentUser,
             receiver: activeChatUser, 
-            text: messageText,
+            text: messageText, // <-- Texto plano (no cifrado)
             timestamp: serverTimestamp(),
             read: false, 
             reactions: {},
         };
+        // ******** FIN DE MODIFICACIÓN ********
 
         if (replyTo) newMessage.replyTo = replyTo;
 
@@ -871,7 +875,8 @@ function createMessageElement(messageId, message) {
         const quoteUser = document.createElement('strong');
         quoteUser.textContent = message.replyTo.sender;
         const quoteText = document.createElement('p');
-        quoteText.textContent = message.replyTo.text.length > 50 ? message.replyTo.text.substring(0, 50) + '...' : message.replyTo.text; // Corregido: usar message.text
+        // Corregido: usar message.replyTo.text
+        quoteText.textContent = message.replyTo.text.length > 50 ? message.replyTo.text.substring(0, 50) + '...' : message.replyTo.text; 
         quoteDiv.appendChild(quoteUser);
         quoteDiv.appendChild(quoteText);
         messageContentDiv.appendChild(quoteDiv);
@@ -879,7 +884,18 @@ function createMessageElement(messageId, message) {
 
     const textP = document.createElement('p');
     textP.className = 'message-text';
-    textP.textContent = message.text;
+    
+    // ******** INICIO DE MODIFICACIÓN: Manejo de mensajes cifrados antiguos ********
+    if (message.encrypted) {
+        // Muestra una advertencia si el mensaje fue cifrado antes de la modificación
+        textP.textContent = `[MENSAJE CIFRADO - No se puede decodificar]`;
+        textP.style.color = '#e74c3c'; // Rojo para destacar
+        textP.style.fontStyle = 'italic';
+    } else {
+        textP.textContent = message.text;
+    }
+    // ******** FIN DE MODIFICACIÓN ********
+    
     messageContentDiv.appendChild(textP);
 
     const timestampSpan = document.createElement('span');
@@ -941,9 +957,18 @@ function createMessageActions(messageId, message) {
         replyTo = { id: messageId, sender: message.sender, text: message.text };
         const replyUser = document.getElementById('reply-user');
         const replyText = document.getElementById('reply-text');
+        
+        // ******** INICIO DE MODIFICACIÓN: Manejo de texto de respuesta cifrado ********
+        let replyContent = message.text;
+        if (message.encrypted) {
+             replyContent = `[MENSAJE CIFRADO]`;
+        }
+        // ******** FIN DE MODIFICACIÓN ********
+        
         if (replyUser && replyText && replyPreview) {
             replyUser.textContent = message.sender;
-            replyText.textContent = message.text.length > 50 ? message.text.substring(0, 50) + '...' : message.text; // Corregido: usar message.text
+            // Corregido: usar replyContent
+            replyText.textContent = replyContent.length > 50 ? replyContent.substring(0, 50) + '...' : replyContent; 
             replyPreview.style.display = 'flex';
         }
         if (messageInput) messageInput.focus();
