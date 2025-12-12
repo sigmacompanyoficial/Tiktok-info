@@ -59,6 +59,13 @@ const usernameDisplay = document.getElementById('username-display');
 const contactStatusText = document.getElementById('contact-status-text'); 
 const chatContactAvatar = document.getElementById('chat-contact-avatar'); 
 
+// --- LÓGICA DE NOTIFICACIÓN TOAST (NUEVOS ELEMENTOS) ---
+const notificationToast = document.getElementById('notification-toast');
+const toastSenderName = document.getElementById('toast-sender-name');
+const toastMessageContent = document.getElementById('toast-message-content');
+const toastAvatarInitial = document.getElementById('toast-avatar-initial');
+let notificationTimeout = null; 
+
 
 // --- 3. VARIABLES DE ESTADO ---
 let currentUser = sessionStorage.getItem('username');
@@ -66,16 +73,80 @@ let replyTo = null;
 let typingTimeout = null;
 let seenIntervals = {};
 let allMessages = {}; 
-let activeChatUser = null; 
+let activeChatUser = null; // ID del usuario del chat actualmente abierto
 let USERS_STATUS = {}; 
 let CONTACTS_MAP = {}; 
 let isTypingActive = false; 
+let timeUpdateInterval = null; // **NUEVA VARIABLE: Intervalo para actualizar el estado de conexión**
 
 // NUEVAS VARIABLES PARA PAGINACIÓN Y OPTIMIZACIÓN
 const MESSAGES_PER_PAGE = 15; // Lote de 15 mensajes
 let chatMessageIds = []; // IDs de mensajes relevantes para el chat activo, ordenados por tiempo
 let loadedMessageCount = 0; // Número de mensajes cargados actualmente
 let isLoadingMore = false; // Bandera para evitar múltiples cargas
+
+
+// ==========================================================
+// --- LÓGICA DE NOTIFICACIÓN TOAST (SHOW MODAL) ---
+// ==========================================================
+
+/**
+ * Muestra el modal de notificación con el mensaje durante 6 segundos.
+ * @param {string} senderName - Nombre de la persona que envía el mensaje.
+ * @param {string} messageText - Contenido del mensaje.
+ * @param {string} username - Nombre de usuario del remitente (para ir al chat al hacer clic).
+ */
+function showNotification(senderName, messageText, username) {
+    // 1. Limpiar cualquier temporizador existente
+    if (notificationTimeout) {
+        clearTimeout(notificationTimeout);
+        notificationTimeout = null;
+    }
+
+    // 2. Rellenar el contenido
+    toastSenderName.textContent = senderName;
+    toastMessageContent.textContent = messageText;
+    toastAvatarInitial.textContent = senderName.charAt(0).toUpperCase();
+
+    // 3. Mostrar la notificación con transición
+    if (notificationToast) {
+        notificationToast.style.display = 'flex';
+        setTimeout(() => {
+            notificationToast.classList.add('show');
+        }, 10); 
+    }
+
+
+    // 4. Configurar el cierre automático después de 6 segundos
+    notificationTimeout = setTimeout(() => {
+        if (notificationToast) notificationToast.classList.remove('show');
+        // Usar un pequeño retraso para la transición de salida
+        setTimeout(() => {
+            if (notificationToast) notificationToast.style.display = 'none';
+        }, 400); 
+        notificationTimeout = null;
+    }, 6000); // 6000 ms = 6 segundos
+
+    // 5. Configurar el clic en la notificación para ir al chat
+    if (notificationToast) {
+        notificationToast.onclick = () => {
+            // Llama a la función existente para cambiar el chat y oculta el panel en móvil
+            setActiveChat(username); 
+            if (window.innerWidth <= 900 && chatRoomPanel) {
+                chatRoomPanel.classList.add('active');
+            }
+            
+            notificationToast.classList.remove('show');
+            if (notificationTimeout) {
+                clearTimeout(notificationTimeout);
+                notificationTimeout = null;
+            }
+        };
+    }
+}
+// ==========================================================
+// --- FIN LÓGICA DE NOTIFICACIÓN TOAST ---
+// ==========================================================
 
 
 // --- FUNCIONES DE UTILIDAD ---
@@ -94,7 +165,12 @@ function getTimeAgo(timestamp) {
     const hours = Math.floor(minutes / 60);
     const days = Math.floor(hours / 24);
     
-    if (days >= 7) return new Date(timestamp).toLocaleDateString();
+    // CORRECCIÓN DE FORMATO DE FECHA PARA 'HACE MUCHO'
+    if (days >= 7) {
+        const date = new Date(timestamp);
+        return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'short' }); 
+    }
+    
     if (seconds < 60) return 'justo ahora';
     if (minutes < 60) return `hace ${minutes} ${minutes === 1 ? 'minuto' : 'minutos'}`;
     if (hours < 24) return `hace ${hours} ${hours === 1 ? 'hora' : 'horas'}`;
@@ -148,17 +224,19 @@ if (!currentUser) {
 function setupUserPresence() {
     const userStatusRef = ref(database, `users/${currentUser}`);
 
+    // Configurar el estado de conexión del usuario actual
     set(userStatusRef, {
         isOnline: true,
         lastSeen: serverTimestamp() 
     });
 
+    // Configurar lo que sucede al desconectarse
     onDisconnect(userStatusRef).set({
         isOnline: false,
         lastSeen: serverTimestamp() 
     });
     
-    // Escuchar cambios en el estado de los usuarios (y poblar la lista de contactos)
+    // Escuchar cambios en el estado de TODOS los usuarios (y poblar la lista de contactos)
     onValue(usersRef, (snapshot) => {
         USERS_STATUS = {};
         const tempUsersMap = {}; 
@@ -176,7 +254,6 @@ function setupUserPresence() {
                     if (latestMessage || status.isOnline) { 
                         tempUsersMap[username] = {
                             username: username,
-                            // QUITAMOS lastMessage PARA QUE NO APAREZCA EN LA LISTA
                             timestamp: latestTimestamp || status.lastSeen || Date.now(),
                             unread: unreadCount,
                         };
@@ -188,13 +265,33 @@ function setupUserPresence() {
         CONTACTS_MAP = tempUsersMap; 
         
         renderConversationsList();
+        // Llamada inicial/de cambio para actualizar el estado del chat activo
         updateChatHeaderStatus(); 
     });
 }
 
+/**
+ * Inicia el intervalo para actualizar periódicamente la hora de 'Última vez' del contacto activo.
+ */
+function startContactStatusInterval() {
+    if (timeUpdateInterval) {
+        clearInterval(timeUpdateInterval);
+    }
+    
+    // Actualizar cada minuto para reflejar la hora con precisión 'hace X minutos'
+    timeUpdateInterval = setInterval(updateChatHeaderStatus, 60000); 
+    // Llamada inicial para garantizar la actualización inmediata
+    updateChatHeaderStatus();
+}
+
+
+/**
+ * Actualiza el texto de estado en el encabezado del chat (En línea / Última vez / Escribiendo).
+ */
 function updateChatHeaderStatus() {
     if (!activeChatUser || !contactStatusText) return;
     
+    // Prioridad 1: Indicador de 'Escribiendo...' (solo si ya estaba activo)
     if (typingIndicator && typingIndicator.style.display !== 'none' && contactStatusText.textContent === 'Escribiendo...') {
         return; 
     }
@@ -205,6 +302,7 @@ function updateChatHeaderStatus() {
         contactStatusText.textContent = 'En línea';
         contactStatusText.className = 'contact-status-text online';
     } else if (status && status.lastSeen) {
+        // CORRECCIÓN: Llamar a getTimeAgo para la actualización en tiempo real
         contactStatusText.textContent = `Última vez ${getTimeAgo(status.lastSeen)}`; 
         contactStatusText.className = 'contact-status-text offline';
     } else {
@@ -216,6 +314,7 @@ function updateChatHeaderStatus() {
 
 if (logoutButton) {
     logoutButton.addEventListener('click', () => {
+        // CORRECCIÓN: Usar remove en onDisconnect y set en el logout para garantizar el estado offline
         set(ref(database, `users/${currentUser}`), { isOnline: false, lastSeen: Date.now() })
             .then(() => {
                 sessionStorage.removeItem('username');
@@ -288,9 +387,6 @@ function renderConversationsList() {
     sortedContacts.forEach(contact => {
         if (caseInsensitiveEquals(contact.username, currentUser)) return;
 
-        // Si el contacto ya existe en CONTACTS_MAP, usamos sus datos.
-        // Si no existe, es un error, pero el bucle anterior ya lo gestionó.
-        // Recalculamos por si acaso
         if (contact.unread === undefined) { 
              const latestData = getLatestConversationData(contact.username);
              contact.timestamp = latestData.latestTimestamp || contact.timestamp;
@@ -309,7 +405,7 @@ function renderConversationsList() {
         // ** MODIFICACIÓN CLAVE: ELIMINAR EL TEXTO DEL ÚLTIMO MENSAJE **
         // ************************************************************
         item.innerHTML = `
-            <div class="contact-avatar ${isOnline ? 'online' : ''}"></div> 
+            <div class="contact-avatar ${isOnline ? 'online' : ''}">${contact.username.charAt(0).toUpperCase()}</div> 
             <div class="chat-details">
                 <span class="chat-name">${contact.username}</span>
                 <p class="last-message">
@@ -334,11 +430,17 @@ function renderConversationsList() {
 }
 
 function setActiveChat(username) {
+    // 1. Limpieza de intervalos y estado
     for (const id in seenIntervals) {
         clearInterval(seenIntervals[id]);
     }
     seenIntervals = {};
     
+    if (timeUpdateInterval) { // **CORRECCIÓN: Limpiar intervalo de status**
+        clearInterval(timeUpdateInterval);
+        timeUpdateInterval = null;
+    }
+
     activeChatUser = username;
     if (currentChatName) currentChatName.textContent = username;
     if (chatContactAvatar) chatContactAvatar.textContent = username.charAt(0).toUpperCase();
@@ -352,13 +454,11 @@ function setActiveChat(username) {
 
     if (chatMessages) {
         chatMessages.innerHTML = '';
-        // CORRECCIÓN PARA PAGINACIÓN: Asegurar que el listener se añade una sola vez.
         chatMessages.removeEventListener('scroll', handleChatScroll); 
         chatMessages.addEventListener('scroll', handleChatScroll);
     }
     
     // --- LÓGICA DE PAGINACIÓN ---
-    // 1. OBTENER Y ORDENAR TODOS LOS MENSAJES RELEVANTES
     chatMessageIds = [];
     for (const id in allMessages) {
         const msg = allMessages[id];
@@ -381,16 +481,16 @@ function setActiveChat(username) {
     loadMessages(true);
     // --- FIN LÓGICA DE PAGINACIÓN ---
     
-    // 1. Resetear contador de no leídos y re-renderizar la lista
+    // 3. Resetear contador de no leídos y re-renderizar la lista
     if (CONTACTS_MAP[username]) {
          CONTACTS_MAP[username].unread = 0;
          renderConversationsList();
     }
     
-    // 2. Actualizar el estado del contacto en el encabezado
-    updateChatHeaderStatus();
+    // 4. Actualizar el estado del contacto en el encabezado e INICIAR EL INTERVALO
+    startContactStatusInterval(); // **CORRECCIÓN: Iniciar el intervalo de actualización de estado**
     
-    // 3. APLAZAR MARCAJE COMO LEÍDO (Mantener la lógica de estabilidad)
+    // 5. APLAZAR MARCAJE COMO LEÍDO (Mantener la lógica de estabilidad)
     setTimeout(() => {
         let updates = {};
         let readPerformed = false;
@@ -416,7 +516,7 @@ function setActiveChat(username) {
         }
     }, 50); 
     
-    // 4. Reiniciar el indicador de typing para el nuevo chat
+    // 6. Reiniciar el indicador de typing para el nuevo chat
     clearTimeout(typingTimeout);
     isTypingActive = false; 
     typingTimeout = null;
@@ -468,11 +568,33 @@ onChildAdded(messagesRef, (snapshot) => {
         // YA NO SE ACTUALIZA lastMessage AQUÍ
         contact.timestamp = message.timestamp || Date.now();
         
+        // Solo aumentar el contador si el mensaje es recibido (no enviado)
         if (!caseInsensitiveEquals(message.sender, currentUser) && 
             !caseInsensitiveEquals(interactionPartner, activeChatUser)) {
              contact.unread = (contact.unread || 0) + 1;
+        } else if (!caseInsensitiveEquals(message.sender, currentUser) && 
+                   caseInsensitiveEquals(interactionPartner, activeChatUser) && 
+                   !message.read) {
+             // Si el chat está abierto, el contador no debe aumentar, pero el timestamp sí se actualiza.
+             // Además, se marcará como leído en el paso 3.
         }
     }
+    
+    // ************************************************************
+    // ** MODIFICACIÓN: LÓGICA DE NOTIFICACIÓN TOAST UNIVERSAL **
+    // ************************************************************
+    // Solo si el usuario actual es el RECEPTOR (se activa para todos los mensajes recibidos)
+    if (caseInsensitiveEquals(message.receiver, currentUser)) { 
+        
+        showNotification(
+            message.sender, 
+            message.text, 
+            interactionPartner
+        );
+    }
+    // ************************************************************
+    // ** FIN LÓGICA DE NOTIFICACIÓN TOAST **
+    // ************************************************************
     
     renderConversationsList();
 
@@ -506,6 +628,7 @@ onChildAdded(messagesRef, (snapshot) => {
                 
                 renderAndAppendMessage(messageId, message); 
 
+                // Marcar como leído si el chat está abierto y es un mensaje recibido
                 if (!caseInsensitiveEquals(message.sender, currentUser) && !message.read) {
                      setTimeout(() => {
                          if (caseInsensitiveEquals(interactionPartner, activeChatUser)) {
@@ -618,9 +741,7 @@ if (messageForm && messageInput) {
             return;
         }
 
-        // ******** INICIO DE MODIFICACIÓN: Envío de texto plano ********
-        // Se envía el texto del mensaje sin cifrar.
-        // Se eliminan los campos 'encrypted' e 'iv' de la estructura del mensaje.
+        // ******** Envío de texto plano ********
         const newMessage = {
             sender: currentUser,
             receiver: activeChatUser, 
@@ -636,6 +757,9 @@ if (messageForm && messageInput) {
         push(messagesRef, newMessage)
             .then(() => {
                 messageInput.value = '';
+                // **CORRECCIÓN: Llamar a autoResize para resetear la altura del textarea**
+                messageInput.style.height = 'auto'; 
+
                 updateTypingStatus(false);
                 isTypingActive = false; 
                 clearTimeout(typingTimeout);
@@ -689,6 +813,34 @@ function setupEmojiPicker() {
 }
 setupEmojiPicker();
 
+
+// Lógica de auto-resize para el textarea (si el chat.html usa textarea)
+function autoResize() {
+    if (messageInput) {
+        messageInput.style.height = 'auto';
+        messageInput.style.height = messageInput.scrollHeight + 'px';
+    }
+}
+
+if (messageInput) {
+    // Escucha de entrada para el auto-resize y el estado de escritura
+    messageInput.addEventListener('input', () => {
+        autoResize(); // **CORRECCIÓN: Llamada a autoResize en cada input**
+
+        if (!isTypingActive) {
+            updateTypingStatus(true);
+            isTypingActive = true;
+        }
+
+        clearTimeout(typingTimeout);
+        typingTimeout = setTimeout(() => {
+            updateTypingStatus(false);
+            isTypingActive = false; 
+            typingTimeout = null;
+        }, 2000); 
+    });
+}
+
 function updateTypingStatus(isTyping) {
     if (!activeChatUser) return;
     const userTypingRef = ref(database, `typing/${currentUser}`);
@@ -703,22 +855,6 @@ function updateTypingStatus(isTyping) {
     }
 }
 
-if (messageInput) {
-    messageInput.addEventListener('input', () => {
-        
-        if (!isTypingActive) {
-            updateTypingStatus(true);
-            isTypingActive = true;
-        }
-
-        clearTimeout(typingTimeout);
-        typingTimeout = setTimeout(() => {
-            updateTypingStatus(false);
-            isTypingActive = false; 
-            typingTimeout = null;
-        }, 2000); 
-    });
-}
 
 onValue(typingRef, (snapshot) => {
     if (!typingIndicator || !activeChatUser) return;
@@ -774,7 +910,7 @@ onValue(typingRef, (snapshot) => {
         
     } else {
         typingIndicator.style.display = 'none';
-        updateChatHeaderStatus(); 
+        updateChatHeaderStatus(); // Llama a la función de estado para restaurar 'En línea' / 'Última vez'
     }
 });
 
@@ -834,6 +970,7 @@ function updateSeenIndicator(messageElement, readAt, messageId) {
         const currentElement = document.getElementById(messageId);
         if (currentElement) {
             const indicator = currentElement.querySelector('.seen-indicator');
+            // La función getTimeAgo() se usa para actualizar la hora relativa cada minuto
             if (indicator) indicator.innerHTML = `<i class="fas fa-eye"></i> Visto ${getTimeAgo(readAt)}`;
         } else {
             clearInterval(seenIntervals[messageId]);
@@ -885,7 +1022,7 @@ function createMessageElement(messageId, message) {
     const textP = document.createElement('p');
     textP.className = 'message-text';
     
-    // ******** INICIO DE MODIFICACIÓN: Manejo de mensajes cifrados antiguos ********
+    // ******** Manejo de mensajes cifrados antiguos ********
     if (message.encrypted) {
         // Muestra una advertencia si el mensaje fue cifrado antes de la modificación
         textP.textContent = `[MENSAJE CIFRADO - No se puede decodificar]`;
@@ -958,7 +1095,7 @@ function createMessageActions(messageId, message) {
         const replyUser = document.getElementById('reply-user');
         const replyText = document.getElementById('reply-text');
         
-        // ******** INICIO DE MODIFICACIÓN: Manejo de texto de respuesta cifrado ********
+        // ******** Manejo de texto de respuesta cifrado ********
         let replyContent = message.text;
         if (message.encrypted) {
              replyContent = `[MENSAJE CIFRADO]`;
@@ -1266,5 +1403,9 @@ document.addEventListener('DOMContentLoaded', () => {
             userAvatarMain.textContent = username.charAt(0).toUpperCase();
         }
     }
+    
+    // **CORRECCIÓN: Llamar a autoResize en la carga inicial para el input/textarea**
+    autoResize(); 
+    
     renderConversationsList();
 });
