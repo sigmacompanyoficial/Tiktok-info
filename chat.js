@@ -189,15 +189,6 @@ function showNotification(senderName, messageText, username) {
         };
     }
 
-    // **NUEVO: Listener para el input de búsqueda de usuarios**
-    if (userSearchInput) {
-        userSearchInput.addEventListener('input', (e) => {
-            const searchTerm = e.target.value.trim();
-            // Re-renderizar la lista de conversaciones con el término de búsqueda
-            renderConversationsList(searchTerm);
-        });
-    }
-
     // **NUEVO: Reproducir sonido de notificación si es posible**
     if (notificationSound && hasInteracted) {
         notificationSound.play().catch(error => {
@@ -1906,6 +1897,15 @@ document.addEventListener('DOMContentLoaded', () => {
     // **CORRECCIÓN: Llamar a autoResize en la carga inicial para el input/textarea**
     autoResize(); 
     
+    // **CORRECCIÓN: Mover el listener del buscador de usuarios a la inicialización.**
+    if (userSearchInput) {
+        userSearchInput.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.trim();
+            // Re-renderizar la lista de conversaciones con el término de búsqueda.
+            renderConversationsList(searchTerm);
+        });
+    }
+
     // **NUEVO: Habilitar el audio después de la primera interacción del usuario**
     const enableAudio = () => {
         if (!hasInteracted && notificationSound) {
