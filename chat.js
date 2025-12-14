@@ -49,6 +49,7 @@ const emojiButton = document.getElementById('emoji-button');
 const replyPreview = document.getElementById('reply-preview');
 const cancelReplyButton = document.getElementById('cancel-reply');
 const emojiPickerContainer = document.getElementById('emoji-picker-container'); 
+const inputArea = document.querySelector('.input-area'); // **CORRECCIÓN: Variable que faltaba**
 const logoutButton = document.getElementById('logout-button');
 const typingIndicator = document.getElementById('typing-indicator');
 
@@ -97,7 +98,6 @@ let chatEnterTime = null; // **NUEVO: Timestamp de cuándo se entró al chat act
 let STREAKS_DATA = {}; // **NUEVA VARIABLE: Para almacenar datos de rachas**
 let timeUpdateInterval = null; // **NUEVA VARIABLE: Intervalo para actualizar el estado de conexión**
 
-let hasInteracted = false; // **NUEVO: Bandera para controlar la interacción del usuario para el sonido**
 // NUEVAS VARIABLES PARA PAGINACIÓN Y OPTIMIZACIÓN
 const MESSAGES_PER_PAGE = 15; // Lote de 15 mensajes
 let chatMessageIds = []; // IDs de mensajes relevantes para el chat activo, ordenados por tiempo
@@ -132,12 +132,7 @@ const deleteChatMessagesButton = document.getElementById('delete-chat-messages-b
  * @param {string} username - Nombre de usuario del remitente (para ir al chat al hacer clic).
  */
 function showNotification(senderName, messageText, username) {
-    // **CORRECCIÓN: No mostrar notificación si el chat de ese usuario ya está activo**
     if (caseInsensitiveEquals(username, activeChatUser) && document.hasFocus()) {
-        return;
-    }
-    // **CORRECCIÓN: No mostrar notificación si la ventana está en foco (el usuario está viendo el chat)**
-    if (document.hasFocus()) {
         return;
     }
 
@@ -150,7 +145,7 @@ function showNotification(senderName, messageText, username) {
     // 2. Rellenar el contenido
     toastSenderName.textContent = senderName;
     toastMessageContent.textContent = messageText;
-    toastAvatarInitial.textContent = senderName.charAt(0).toUpperCase();
+    if (toastAvatarInitial) toastAvatarInitial.textContent = senderName.charAt(0).toUpperCase();
 
     // 3. Mostrar la notificación con transición
     if (notificationToast) {
@@ -188,19 +183,7 @@ function showNotification(senderName, messageText, username) {
             }
         };
     }
-
-    // **NUEVO: Reproducir sonido de notificación si es posible**
-    if (notificationSound && hasInteracted) {
-        notificationSound.play().catch(error => {
-            // El error puede ocurrir si el usuario no ha interactuado aún,
-            // o si hay algún problema con el archivo de audio.
-            console.warn("No se pudo reproducir el sonido de notificación:", error);
-        });
-    }
 }
-// ==========================================================
-// --- FIN LÓGICA DE NOTIFICACIÓN TOAST ---
-// ==========================================================
 
 
 // --- FUNCIONES DE UTILIDAD ---
@@ -774,8 +757,16 @@ onChildAdded(messagesRef, (snapshot) => {
     // ************************************************************
     // **CORRECCIÓN: La lógica de notificación se ha movido y mejorado en showNotification()**
     // Solo se llama si el usuario actual es el RECEPTOR y el mensaje no está leído.
-    if (caseInsensitiveEquals(message.receiver, currentUser) && !message.read) { 
-        
+    if (caseInsensitiveEquals(message.receiver, currentUser) && !message.read) {
+        // **NUEVO: Forzar la reproducción del sonido aquí**
+        // Esto asegura que el sonido se intente reproducir incluso si la notificación visual no se muestra.
+        if (notificationSound) {
+            notificationSound.currentTime = 0;
+            notificationSound.play().catch(error => {
+                console.warn("No se pudo reproducir el sonido (el usuario necesita interactuar con la página):", error.message);
+            });
+        }
+
         showNotification(
             message.sender, 
             message.text, 
@@ -1750,6 +1741,7 @@ function openSearch() {
     isSearchActive = true;
     searchBar.style.display = 'flex';
     chatHeader.style.display = 'none'; // Ocultar la cabecera normal
+    inputArea.style.display = 'none'; // Ocultar el área de input
     searchInput.focus();
     // Deshabilitar acciones de mensajes mientras se busca
     document.querySelectorAll('.message-wrapper').forEach(el => el.classList.add('search-active'));
@@ -1905,21 +1897,6 @@ document.addEventListener('DOMContentLoaded', () => {
             renderConversationsList(searchTerm);
         });
     }
-
-    // **NUEVO: Habilitar el audio después de la primera interacción del usuario**
-    const enableAudio = () => {
-        if (!hasInteracted && notificationSound) {
-            notificationSound.play().then(() => {
-                notificationSound.pause();
-                notificationSound.currentTime = 0;
-            }).catch(error => {
-                console.log("El usuario debe interactuar con la página para habilitar el sonido.", error);
-            });
-            hasInteracted = true;
-            document.body.removeEventListener('click', enableAudio);
-        }
-    };
-    document.body.addEventListener('click', enableAudio);
 
     renderConversationsList();
 });

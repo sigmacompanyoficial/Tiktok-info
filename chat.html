@@ -1128,6 +1128,20 @@
         text-overflow: ellipsis;
     }
 
+    /* --- NUEVO: Estilos para el avatar y contenido del toast --- */
+    .toast-avatar {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: var(--primary-color);
+        color: white;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 600;
+        flex-shrink: 0;
+    }
+
     /* --- ESTILOS PARA EL MODAL DE ESTADÍSTICAS --- */
     .stats-modal-overlay {
         position: fixed;
@@ -1190,7 +1204,7 @@
     }
 
     .stat-item {
-        background: var(--secondary-color);
+         background: var(--secondary-color);
         padding: 15px;
         border-radius: 8px;
         text-align: center;
@@ -1368,12 +1382,10 @@
     </div>
 
     <div id="notification-toast">
-        <div class="toast-content">
-            <div class="toast-avatar" id="toast-avatar-initial"></div>
-            <div class="toast-details">
-                <span class="toast-sender" id="toast-sender-name"></span>
-                <p class="toast-message" id="toast-message-content"></p>
-            </div>
+        <div class="toast-avatar" id="toast-avatar-initial"></div>
+        <div class="toast-details">
+            <span class="toast-sender" id="toast-sender-name"></span>
+            <p class="toast-message" id="toast-message-content"></p>
         </div>
     </div>
 
