@@ -4,7 +4,7 @@ import { getDatabase, ref, get, set, child, remove, update } from "https://www.g
 
 // La configuración de tu app web de Firebase
 const firebaseConfig = {
-    apiKey: "AIzaSyA-ODwm4wUWYsfbgtmy4jelIPlsZsCQ4Ck",
+    apiKey: "AIzaSyA-ODwm4wUWYsfbgtmy4jelIPlzZsCQ4Ck",
     authDomain: "sigma-xat2.firebaseapp.com",
     databaseURL: "https://sigma-xat2-default-rtdb.europe-west1.firebasedatabase.app", 
     projectId: "sigma-xat2",
@@ -245,40 +245,60 @@ saveUserChangesBtn.addEventListener('click', async () => {
                 return;
             }
 
-            // 2. Obtener la credencial actual
+            // --- PASO 1: Mover Credenciales (/credentials) ---
             const currentCredentialSnapshot = await get(child(dbRef, `credentials/${editingUsername}`));
             const currentData = currentCredentialSnapshot.val();
             
-            // 3. Crear el nuevo nodo en /credentials
+            // Crear el nuevo nodo en /credentials
             const newCredentialRef = ref(database, 'credentials/' + newUsername);
             await set(newCredentialRef, {
                 password: newPassword || currentData.password // Usar la nueva o la actual
             });
 
-            // 4. Borrar el nodo antiguo de /credentials
+            // Borrar el nodo antiguo de /credentials
             await remove(child(dbRef, `credentials/${editingUsername}`));
             
             
-            // <<<< CORRECCIÓN: SINCRONIZACIÓN DE USUARIOS EN /users >>>>
-            // 5. Obtener los datos de presencia/estado del usuario antiguo en /users
+            // --- PASO 2: Mover Estado de Usuario (/users) ---
             const currentUserSnapshot = await get(child(dbRef, `users/${editingUsername}`));
             
             if (currentUserSnapshot.exists()) {
                 const userData = currentUserSnapshot.val();
                 
-                // 6. Crear el nuevo nodo en /users con los datos antiguos
+                // Crear el nuevo nodo en /users con los datos antiguos
                 const newUserRef = ref(database, 'users/' + newUsername);
                 await set(newUserRef, userData);
                 
-                // 7. Borrar el nodo antiguo en /users
+                // Borrar el nodo antiguo en /users
                 await remove(child(dbRef, `users/${editingUsername}`));
             }
-            // <<<< FIN DE CORRECCIÓN >>>>
+            
+            // --- PASO 3: Actualizar nombre en todos los mensajes (/messages) ---
+            const messagesSnapshot = await get(child(dbRef, 'messages'));
+            if (messagesSnapshot.exists()) {
+                const messages = messagesSnapshot.val();
+                const updates = {};
+                
+                // Iterar sobre cada mensaje y buscar el username antiguo
+                for (const messageId in messages) {
+                    const message = messages[messageId];
+                    if (message.username === editingUsername) {
+                        // Crear el path de actualización para ese mensaje
+                        updates[`messages/${messageId}/username`] = newUsername;
+                    }
+                }
 
-            // 8. Actualizar la variable de edición
+                // Ejecutar la actualización masiva de todos los mensajes
+                if (Object.keys(updates).length > 0) {
+                    await update(dbRef, updates);
+                }
+            }
+            // -----------------------------------------------------------------
+
+            // Actualizar la variable de edición
             editingUsername = newUsername;
 
-            setStatus(modalStatus, `Usuario y contraseña cambiados para "${newUsername}".`, 'success');
+            setStatus(modalStatus, `Usuario y contraseña cambiados para "${newUsername}". (Mensajes actualizados)`, 'success');
 
         } else if (newPassword) {
             // Solo cambio de contraseña (o el nombre de usuario es el mismo)
@@ -289,22 +309,12 @@ saveUserChangesBtn.addEventListener('click', async () => {
         }
         
         // Si todo va bien, cerrar y recargar
-        // Si solo se cambió la contraseña, el nombre de usuario de la tabla no cambia.
-        // Si se cambió el nombre, el nuevo nombre ya está en editingUsername.
-        if (!newUsername || newUsername === editingUsername) {
-            setTimeout(() => {
-                editModal.style.display = 'none';
-                loadUsers();
-                editingUsername = null;
-            }, 1000); // Esperar un segundo para que el usuario vea el mensaje
-        } else {
-             // Si el nombre de usuario cambió, la recarga ya se manejó arriba.
-             setTimeout(() => {
-                editModal.style.display = 'none';
-                loadUsers();
-                editingUsername = null;
-            }, 1000);
-        }
+        // Si el nombre de usuario cambió, la recarga ya se manejó arriba.
+        setTimeout(() => {
+            editModal.style.display = 'none';
+            loadUsers();
+            editingUsername = null;
+        }, 1000); // Esperar un segundo para que el usuario vea el mensaje
 
     } catch (error) {
         console.error("Error al guardar cambios de usuario:", error);

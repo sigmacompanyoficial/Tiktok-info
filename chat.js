@@ -35,6 +35,8 @@ const database = getDatabase(app);
 const messagesRef = ref(database, 'messages');
 const typingRef = ref(database, 'typing');
 const usersRef = ref(database, 'users'); 
+const streaksRef = ref(database, 'streaks'); // **NUEVA REFERENCIA: Para las rachas**
+const chatDurationsRef = ref(database, 'chatDurations'); // **NUEVO: Para duración de chats**
 
 
 // --- 2. REFERENCIAS A ELEMENTOS DEL DOM ---
@@ -58,12 +60,25 @@ const currentChatName = document.getElementById('current-chat-name');
 const usernameDisplay = document.getElementById('username-display');
 const contactStatusText = document.getElementById('contact-status-text'); 
 const chatContactAvatar = document.getElementById('chat-contact-avatar'); 
+const headerStreakIndicator = document.getElementById('header-streak-indicator'); // **NUEVO: Indicador de racha en cabecera**
 
+// --- ELEMENTOS DE BÚSQUEDA EN CHAT (NUEVO) ---
+const searchInChatButton = document.getElementById('search-in-chat-button');
+const searchBar = document.getElementById('search-bar');
+const searchInput = document.getElementById('search-input');
+const searchResultsCount = document.getElementById('search-results-count');
+const prevResultButton = document.getElementById('prev-result-button');
+const nextResultButton = document.getElementById('next-result-button'); // Corregido
+const closeSearchButton = document.getElementById('close-search-button');
 // --- LÓGICA DE NOTIFICACIÓN TOAST (NUEVOS ELEMENTOS) ---
 const notificationToast = document.getElementById('notification-toast');
 const toastSenderName = document.getElementById('toast-sender-name');
 const toastMessageContent = document.getElementById('toast-message-content');
 const toastAvatarInitial = document.getElementById('toast-avatar-initial');
+const notificationSound = document.getElementById('notification-sound'); // **NUEVO: Referencia al sonido**
+const userSearchInput = document.getElementById('user-search-input'); // **NUEVO: Referencia al input de búsqueda**
+
+
 let notificationTimeout = null; 
 
 
@@ -77,13 +92,33 @@ let activeChatUser = null; // ID del usuario del chat actualmente abierto
 let USERS_STATUS = {}; 
 let CONTACTS_MAP = {}; 
 let isTypingActive = false; 
+let CHAT_DURATIONS = {}; // **NUEVO: Almacena las duraciones de los chats**
+let chatEnterTime = null; // **NUEVO: Timestamp de cuándo se entró al chat actual**
+let STREAKS_DATA = {}; // **NUEVA VARIABLE: Para almacenar datos de rachas**
 let timeUpdateInterval = null; // **NUEVA VARIABLE: Intervalo para actualizar el estado de conexión**
 
+let hasInteracted = false; // **NUEVO: Bandera para controlar la interacción del usuario para el sonido**
 // NUEVAS VARIABLES PARA PAGINACIÓN Y OPTIMIZACIÓN
 const MESSAGES_PER_PAGE = 15; // Lote de 15 mensajes
 let chatMessageIds = []; // IDs de mensajes relevantes para el chat activo, ordenados por tiempo
 let loadedMessageCount = 0; // Número de mensajes cargados actualmente
 let isLoadingMore = false; // Bandera para evitar múltiples cargas
+
+// --- VARIABLES DE BÚSQUEDA (NUEVO) ---
+let searchResults = [];
+let currentSearchResultIndex = -1;
+let isSearchActive = false;
+
+// --- ELEMENTOS DEL MODAL DE ESTADÍSTICAS (NUEVO) ---
+const statsButton = document.getElementById('chat-stats-button');
+const statsModal = document.getElementById('stats-modal');
+const closeModalButton = document.getElementById('stats-modal-close');
+const creationDateEl = document.getElementById('stats-creation-date');
+const messageCountEl = document.getElementById('stats-message-count');
+const streakCountEl = document.getElementById('stats-streak-count');
+const chatDurationEl = document.getElementById('stats-chat-duration');
+const wordChartCanvas = document.getElementById('word-chart');
+const deleteChatMessagesButton = document.getElementById('delete-chat-messages-button'); // **NUEVO**
 
 
 // ==========================================================
@@ -97,6 +132,15 @@ let isLoadingMore = false; // Bandera para evitar múltiples cargas
  * @param {string} username - Nombre de usuario del remitente (para ir al chat al hacer clic).
  */
 function showNotification(senderName, messageText, username) {
+    // **CORRECCIÓN: No mostrar notificación si el chat de ese usuario ya está activo**
+    if (caseInsensitiveEquals(username, activeChatUser) && document.hasFocus()) {
+        return;
+    }
+    // **CORRECCIÓN: No mostrar notificación si la ventana está en foco (el usuario está viendo el chat)**
+    if (document.hasFocus()) {
+        return;
+    }
+
     // 1. Limpiar cualquier temporizador existente
     if (notificationTimeout) {
         clearTimeout(notificationTimeout);
@@ -112,7 +156,7 @@ function showNotification(senderName, messageText, username) {
     if (notificationToast) {
         notificationToast.style.display = 'flex';
         setTimeout(() => {
-            notificationToast.classList.add('show');
+            notificationToast.classList.add('show'); // La clase 'show' ahora controla la posición
         }, 10); 
     }
 
@@ -135,6 +179,7 @@ function showNotification(senderName, messageText, username) {
             if (window.innerWidth <= 900 && chatRoomPanel) {
                 chatRoomPanel.classList.add('active');
             }
+            closeSearch(); // Cierra la búsqueda si está activa
             
             notificationToast.classList.remove('show');
             if (notificationTimeout) {
@@ -142,6 +187,24 @@ function showNotification(senderName, messageText, username) {
                 notificationTimeout = null;
             }
         };
+    }
+
+    // **NUEVO: Listener para el input de búsqueda de usuarios**
+    if (userSearchInput) {
+        userSearchInput.addEventListener('input', (e) => {
+            const searchTerm = e.target.value.trim();
+            // Re-renderizar la lista de conversaciones con el término de búsqueda
+            renderConversationsList(searchTerm);
+        });
+    }
+
+    // **NUEVO: Reproducir sonido de notificación si es posible**
+    if (notificationSound && hasInteracted) {
+        notificationSound.play().catch(error => {
+            // El error puede ocurrir si el usuario no ha interactuado aún,
+            // o si hay algún problema con el archivo de audio.
+            console.warn("No se pudo reproducir el sonido de notificación:", error);
+        });
     }
 }
 // ==========================================================
@@ -264,9 +327,31 @@ function setupUserPresence() {
 
         CONTACTS_MAP = tempUsersMap; 
         
-        renderConversationsList();
+        renderConversationsList(userSearchInput ? userSearchInput.value : '');
         // Llamada inicial/de cambio para actualizar el estado del chat activo
         updateChatHeaderStatus(); 
+    });
+
+    // **NUEVO LISTENER: Escuchar cambios en las rachas**
+    onValue(streaksRef, (snapshot) => {
+        if (snapshot.exists()) {
+            STREAKS_DATA = snapshot.val();
+        } else {
+            STREAKS_DATA = {};
+        }
+        // Re-renderizar la lista de conversaciones para mostrar/actualizar las rachas
+        renderConversationsList(userSearchInput ? userSearchInput.value : '');
+        updateHeaderStreak(); // **NUEVO: Actualizar la racha en la cabecera también**
+    });
+
+    // **NUEVO LISTENER: Escuchar cambios en las duraciones de los chats**
+    onValue(chatDurationsRef, (snapshot) => {
+        if (snapshot.exists()) {
+            CHAT_DURATIONS = snapshot.val();
+        } else {
+            CHAT_DURATIONS = {};
+        }
+        // Si el modal está abierto, podríamos querer actualizarlo en tiempo real, pero por ahora lo dejamos así.
     });
 }
 
@@ -314,12 +399,20 @@ function updateChatHeaderStatus() {
 
 if (logoutButton) {
     logoutButton.addEventListener('click', () => {
+        // **NUEVO: Guardar la duración del chat activo antes de salir**
+        if (activeChatUser && chatEnterTime) {
+            const duration = Date.now() - chatEnterTime;
+            updateChatDuration(activeChatUser, duration);
+        }
+
         // CORRECCIÓN: Usar remove en onDisconnect y set en el logout para garantizar el estado offline
         set(ref(database, `users/${currentUser}`), { isOnline: false, lastSeen: Date.now() })
             .then(() => {
                 sessionStorage.removeItem('username');
                 window.location.href = 'nnn.html'; 
             });
+
+
     });
 }
 
@@ -377,14 +470,34 @@ function formatTimeForList(timestamp) {
     return date.toLocaleDateString([], { month: 'numeric', day: 'numeric' });
 }
 
-function renderConversationsList() {
+/**
+ * Renderiza la lista de conversaciones, opcionalmente filtrada por un término de búsqueda.
+ * @param {string} [searchTerm=''] - El término para filtrar usuarios.
+ */
+function renderConversationsList(searchTerm = '') {
     if (!conversationsContainer) return;
 
     conversationsContainer.innerHTML = '';
     
-    const sortedContacts = Object.values(CONTACTS_MAP).sort((a, b) => b.timestamp - a.timestamp);
+    let contactsToRender = [];
+    const lowerCaseSearchTerm = searchTerm.toLowerCase();
+
+    if (searchTerm) {
+        // Modo Búsqueda: Filtra TODOS los usuarios conocidos
+        contactsToRender = Object.keys(USERS_STATUS)
+            .filter(username => !caseInsensitiveEquals(username, currentUser) && username.toLowerCase().includes(lowerCaseSearchTerm))
+            .map(username => {
+                // Si el usuario ya está en nuestros contactos, usamos sus datos, si no, creamos un objeto básico
+                return CONTACTS_MAP[username] || { username, timestamp: 0, unread: 0 };
+            });
+    } else {
+        // Modo Normal: Muestra las conversaciones existentes
+        contactsToRender = Object.values(CONTACTS_MAP);
+    }
     
-    sortedContacts.forEach(contact => {
+    const sortedContacts = contactsToRender.sort((a, b) => b.timestamp - a.timestamp);
+
+    for (const contact of sortedContacts) {
         if (caseInsensitiveEquals(contact.username, currentUser)) return;
 
         if (contact.unread === undefined) { 
@@ -401,6 +514,25 @@ function renderConversationsList() {
         const status = USERS_STATUS[contact.username];
         const isOnline = status && status.isOnline;
         
+        // **LÓGICA DE RACHA: Obtener la racha para este contacto**
+        const streakKey = [currentUser, contact.username].sort().join('_');
+        const streakData = STREAKS_DATA[streakKey];
+        let streakHtml = '';
+
+        if (streakData && streakData.count > 0) {
+            const today = new Date().setHours(0, 0, 0, 0);
+            const lastInteractionDay = new Date(streakData.lastInteraction).setHours(0, 0, 0, 0);
+            const oneDay = 24 * 60 * 60 * 1000;
+
+            if (today === lastInteractionDay) {
+                // Racha activa hoy (roja)
+                streakHtml = `<span class="streak-indicator">🔥 ${streakData.count}</span>`;
+            } else if (today - lastInteractionDay === oneDay) {
+                // Racha en periodo de gracia (gris)
+                streakHtml = `<span class="streak-indicator grace-period">🔥 ${streakData.count}</span>`;
+            }
+            // Si han pasado más de 48h, la racha está rota y no se muestra. `updateStreak` la reseteará.
+        }
         // ************************************************************
         // ** MODIFICACIÓN CLAVE: ELIMINAR EL TEXTO DEL ÚLTIMO MENSAJE **
         // ************************************************************
@@ -408,8 +540,8 @@ function renderConversationsList() {
             <div class="contact-avatar ${isOnline ? 'online' : ''}">${contact.username.charAt(0).toUpperCase()}</div> 
             <div class="chat-details">
                 <span class="chat-name">${contact.username}</span>
-                <p class="last-message">
-                    ${contact.unread > 0 ? `<span class="unread-count-placeholder">Mensajes nuevos</span>` : '&nbsp;'}
+                <p class="last-message">${streakHtml}
+                    ${!searchTerm && contact.unread > 0 ? `<span class="unread-count-placeholder">Mensajes nuevos</span>` : (searchTerm ? 'Tocar para chatear' : '&nbsp;')}
                 </p>
             </div>
             <div class="chat-meta">
@@ -423,14 +555,28 @@ function renderConversationsList() {
             if (window.innerWidth <= 900 && chatRoomPanel) {
                  chatRoomPanel.classList.add('active');
             }
+            // **NUEVO: Limpiar la búsqueda al seleccionar un chat**
+            if (userSearchInput) {
+                userSearchInput.value = '';
+                renderConversationsList(); // Volver a la vista normal
+            }
         });
 
         conversationsContainer.appendChild(item);
-    });
+    }
 }
 
 function setActiveChat(username) {
-    // 1. Limpieza de intervalos y estado
+    // **NUEVO: Guardar la duración del chat que se está dejando**
+    if (activeChatUser && chatEnterTime) {
+        const duration = Date.now() - chatEnterTime;
+        if (duration > 1000) { // Solo guardar si es más de 1 segundo
+            updateChatDuration(activeChatUser, duration);
+        }
+    }
+    // **FIN NUEVO**
+
+    // 1. Limpieza de intervalos y estado anterior
     for (const id in seenIntervals) {
         clearInterval(seenIntervals[id]);
     }
@@ -440,6 +586,9 @@ function setActiveChat(username) {
         clearInterval(timeUpdateInterval);
         timeUpdateInterval = null;
     }
+
+    // **NUEVO: Iniciar el cronómetro para el nuevo chat**
+    chatEnterTime = Date.now();
 
     activeChatUser = username;
     if (currentChatName) currentChatName.textContent = username;
@@ -484,11 +633,12 @@ function setActiveChat(username) {
     // 3. Resetear contador de no leídos y re-renderizar la lista
     if (CONTACTS_MAP[username]) {
          CONTACTS_MAP[username].unread = 0;
-         renderConversationsList();
+         renderConversationsList(userSearchInput ? userSearchInput.value : '');
     }
     
     // 4. Actualizar el estado del contacto en el encabezado e INICIAR EL INTERVALO
     startContactStatusInterval(); // **CORRECCIÓN: Iniciar el intervalo de actualización de estado**
+    updateHeaderStreak(); // **NUEVO: Actualizar la racha en la cabecera al cambiar de chat**
     
     // 5. APLAZAR MARCAJE COMO LEÍDO (Mantener la lógica de estabilidad)
     setTimeout(() => {
@@ -522,6 +672,54 @@ function setActiveChat(username) {
     typingTimeout = null;
 }
 
+/**
+ * **NUEVO: Actualiza la duración total de un chat en Firebase.**
+ * @param {string} chatPartner - El usuario con el que se está chateando.
+ * @param {number} durationToAdd - La duración en milisegundos a añadir.
+ */
+async function updateChatDuration(chatPartner, durationToAdd) {
+    const chatKey = [currentUser, chatPartner].sort().join('_');
+    const durationRef = ref(database, `chatDurations/${chatKey}`);
+
+    try {
+        const snapshot = await get(durationRef);
+        const currentDuration = snapshot.exists() ? snapshot.val() : 0;
+        await set(durationRef, currentDuration + durationToAdd);
+    } catch (error) {
+        console.error("Error al actualizar la duración del chat:", error);
+    }
+}
+
+/**
+ * Actualiza el indicador de racha en la cabecera del chat activo.
+ */
+function updateHeaderStreak() {
+    if (!activeChatUser || !headerStreakIndicator) return;
+
+    const streakKey = [currentUser, activeChatUser].sort().join('_');
+    const streakData = STREAKS_DATA[streakKey];
+
+    headerStreakIndicator.innerHTML = '';
+    headerStreakIndicator.className = '';
+
+    if (streakData && streakData.count > 0) {
+        const today = new Date().setHours(0, 0, 0, 0);
+        const lastInteractionDay = new Date(streakData.lastInteraction).setHours(0, 0, 0, 0);
+        const oneDay = 24 * 60 * 60 * 1000;
+
+        let streakClass = '';
+        if (today === lastInteractionDay) {
+            // Racha activa hoy (roja)
+            streakClass = 'streak-indicator';
+        } else if (today - lastInteractionDay === oneDay) {
+            // Racha en periodo de gracia (gris)
+            streakClass = 'streak-indicator grace-period';
+        }
+
+        headerStreakIndicator.className = streakClass;
+        headerStreakIndicator.innerHTML = `🔥 ${streakData.count}`;
+    }
+}
 // --------------------------------------------------------------------------
 // --- 6. GESTIÓN DE MENSAJES EN TIEMPO REAL (onChildAdded, onChildChanged) ---
 // --------------------------------------------------------------------------
@@ -583,8 +781,9 @@ onChildAdded(messagesRef, (snapshot) => {
     // ************************************************************
     // ** MODIFICACIÓN: LÓGICA DE NOTIFICACIÓN TOAST UNIVERSAL **
     // ************************************************************
-    // Solo si el usuario actual es el RECEPTOR (se activa para todos los mensajes recibidos)
-    if (caseInsensitiveEquals(message.receiver, currentUser)) { 
+    // **CORRECCIÓN: La lógica de notificación se ha movido y mejorado en showNotification()**
+    // Solo se llama si el usuario actual es el RECEPTOR y el mensaje no está leído.
+    if (caseInsensitiveEquals(message.receiver, currentUser) && !message.read) { 
         
         showNotification(
             message.sender, 
@@ -697,7 +896,7 @@ onChildChanged(messagesRef, (snapshot) => {
          
          if (contact.unread !== unreadCount) {
              contact.unread = unreadCount;
-             renderConversationsList(); 
+             renderConversationsList(userSearchInput ? userSearchInput.value : ''); 
          }
     }
 });
@@ -723,7 +922,7 @@ onChildRemoved(messagesRef, (snapshot) => {
     if (messageElement) messageElement.remove();
     
     // Necesario re-renderizar para actualizar el 'lastMessage' de la lista (aunque ahora no mostramos el texto)
-    renderConversationsList(); 
+    renderConversationsList(userSearchInput ? userSearchInput.value : ''); 
 });
 
 // --------------------------------------------------------------------------
@@ -760,6 +959,8 @@ if (messageForm && messageInput) {
                 // **CORRECCIÓN: Llamar a autoResize para resetear la altura del textarea**
                 messageInput.style.height = 'auto'; 
 
+                updateStreak(currentUser, activeChatUser); // **NUEVO: Actualizar la racha al enviar mensaje**
+
                 updateTypingStatus(false);
                 isTypingActive = false; 
                 clearTimeout(typingTimeout);
@@ -770,6 +971,78 @@ if (messageForm && messageInput) {
             })
             .catch(error => console.error("Error al enviar:", error));
     });
+}
+
+/**
+ * Comprueba y actualiza la racha entre dos usuarios.
+ * @param {string} user1 - El usuario actual.
+ * @param {string} user2 - El otro usuario en el chat.
+ */
+async function updateStreak(user1, user2) {
+    const streakKey = [user1, user2].sort().join('_');
+    const streakDataRef = ref(database, `streaks/${streakKey}`);
+    const now = Date.now();
+    const today = new Date(now).setHours(0, 0, 0, 0); // Timestamp para el inicio del día de hoy
+
+    try {
+        const snapshot = await get(streakDataRef);
+        let streakData = snapshot.val();
+
+            // Comprobar si el otro usuario ha participado
+        const otherUserLastMessage = streakData?.participants?.[user2] || 0;
+        const bothParticipated = (now - otherUserLastMessage) < 24 * 60 * 60 * 1000;
+
+        if (!streakData) {
+            // No hay racha, se prepara para iniciar una. El contador es 0 hasta que ambos participen.
+            streakData = {
+                count: 0,
+                lastInteraction: today,
+                participants: { [user1]: now }
+            };
+        } else {
+            // Hay una racha existente, se actualiza.
+            const lastInteractionDay = new Date(streakData.lastInteraction).setHours(0, 0, 0, 0);
+            const yesterday = new Date(today).setDate(new Date(today).getDate() - 1);
+
+            // Actualizar la participación del usuario actual
+            streakData.participants = streakData.participants || {};
+            streakData.participants[user1] = now;
+            
+            // Si la racha no ha comenzado (count es 0) y ambos han participado, se inicia.
+            if (streakData.count === 0) {
+                if (bothParticipated) {
+                    streakData.count = 1; // ¡La racha comienza!
+                    streakData.lastInteraction = today; 
+                }
+            } else {
+                // La racha ya está activa (count > 0)
+                if (bothParticipated) {
+                    // Si la última interacción fue ayer (o hoy, reactivando la racha en gracia), se incrementa.
+                    if (lastInteractionDay === yesterday || (lastInteractionDay < today && streakData.count > 0)) {
+                        streakData.count++;
+                        streakData.lastInteraction = today;
+                    } else if (today - lastInteractionDay > 24 * 60 * 60 * 1000) {
+                        // La racha se rompió porque pasó más de 48h, se reinicia.
+                        streakData.count = 1;
+                        streakData.lastInteraction = today;
+                    }
+                    // Si la interacción es en el mismo día, no se hace nada con el contador.
+                } else {
+                    // Si el otro usuario no ha participado en 24h, la racha se rompe y reinicia.
+                    streakData.count = 1;
+                    streakData.lastInteraction = today;
+                    // Se reinicia la participación del otro usuario para que la racha pueda continuar desde 1.
+                    delete streakData.participants[user2];
+                }
+            }
+        }
+
+        // Guardar los datos actualizados en Firebase
+        await set(streakDataRef, streakData);
+
+    } catch (error) {
+        console.error("Error al actualizar la racha:", error);
+    }
 }
 
 if (cancelReplyButton) {
@@ -930,7 +1203,7 @@ if (clearAllButton) {
                         CONTACTS_MAP[user].timestamp = Date.now();
                         CONTACTS_MAP[user].unread = 0;
                     }
-                    renderConversationsList(); 
+                    renderConversationsList(userSearchInput ? userSearchInput.value : ''); 
                 })
                 .catch(error => console.error("Error al eliminar todos los mensajes:", error));
         }
@@ -1065,9 +1338,10 @@ function createMessageElement(messageId, message) {
     return messageWrapper;
 }
 
-function renderAndAppendMessage(messageId, message) {
+function renderAndAppendMessage(messageId, message, skipDateSeparator = false) {
     const messageWrapper = createMessageElement(messageId, message);
-    if (chatMessages) chatMessages.appendChild(messageWrapper);
+    chatMessages.appendChild(messageWrapper);
+    
     const actionsDiv = messageWrapper.querySelector('.message-actions');
     setupMessageActions(messageWrapper, actionsDiv); 
 }
@@ -1111,6 +1385,7 @@ function createMessageActions(messageId, message) {
         if (messageInput) messageInput.focus();
         closeAllMessageActions(); 
     };
+    if (isSearchActive) replyButton.disabled = true; // Deshabilitar si la búsqueda está activa
     actionsDiv.appendChild(replyButton);
     
     if (isSentByCurrentUser) {
@@ -1123,6 +1398,7 @@ function createMessageActions(messageId, message) {
             deleteMessage(messageId);
             closeAllMessageActions();
         };
+        if (isSearchActive) deleteButton.disabled = true; // Deshabilitar si la búsqueda está activa
         actionsDiv.appendChild(deleteButton);
     }
     
@@ -1131,6 +1407,7 @@ function createMessageActions(messageId, message) {
     reactButton.title = 'Reaccionar';
     reactButton.className = 'action-button';
     actionsDiv.appendChild(reactButton);
+    if (isSearchActive) reactButton.disabled = true; // Deshabilitar si la búsqueda está activa
     
     const reactionSelector = document.createElement('div');
     reactionSelector.className = 'reaction-selector';
@@ -1306,8 +1583,11 @@ function loadMessages(isInitialLoad = false) {
         
         // Renderizar y añadir al final del chatMessages
         batchIds.forEach(id => {
-            renderAndAppendMessage(id, allMessages[id]);
+            const currentMessage = allMessages[id];
+            renderAndAppendMessage(id, currentMessage);
         });
+        // CORRECCIÓN: Insertar todos los separadores de fecha después de renderizar los mensajes.
+        insertDateSeparatorsForExistingMessages();
         
         loadedMessageCount = batchIds.length;
         
@@ -1343,10 +1623,13 @@ function loadMessages(isInitialLoad = false) {
         // Almacenar temporalmente los elementos creados para la inserción
         const newElements = [];
         
-        batchIds.forEach(id => {
+        // Iterar en orden inverso para la lógica de fecha
+        [...batchIds].reverse().forEach((id, index) => {
             const msg = allMessages[id];
             const messageElement = createMessageElement(id, msg);
-            newElements.push(messageElement);
+            
+            // La inserción se hará al revés, así que el elemento va primero
+            newElements.unshift(messageElement);
             
             if (caseInsensitiveEquals(msg.sender, currentUser) && msg.read && msg.readAt) {
                 // Configurar el indicador de visto si es un mensaje enviado
@@ -1354,6 +1637,13 @@ function loadMessages(isInitialLoad = false) {
             }
         });
         
+        // CORRECCIÓN: Insertar todos los nuevos elementos primero.
+        if (chatMessages) {
+             const loadIndicator = document.getElementById('load-more-indicator');
+             const insertionPoint = loadIndicator ? loadIndicator.nextSibling : chatMessages.firstChild;
+             newElements.forEach(element => chatMessages.insertBefore(element, insertionPoint));
+        }
+
         // Insertar todos los nuevos elementos en la parte superior del chat
         if (chatMessages) {
              const loadIndicator = document.getElementById('load-more-indicator');
@@ -1364,11 +1654,10 @@ function loadMessages(isInitialLoad = false) {
                  // Importante: configurar las acciones después de insertarlo en el DOM
                  const actionsDiv = element.querySelector('.message-actions');
                  if (actionsDiv) setupMessageActions(element, actionsDiv); 
-             });
+            });
         }
 
         loadedMessageCount += batchIds.length;
-        
         // Ajustar el scroll para mantener la posición del usuario
         if (chatMessages) {
             const newScrollHeight = chatMessages.scrollHeight;
@@ -1376,8 +1665,76 @@ function loadMessages(isInitialLoad = false) {
         }
     }
     
+    // CORRECCIÓN: Volver a calcular e insertar TODOS los separadores de fecha después de cualquier carga.
+    insertDateSeparatorsForExistingMessages();
+
     hideLoadingIndicator();
     isLoadingMore = false;
+}
+
+/**
+ * NUEVO: Crea y devuelve un elemento separador de fecha si es necesario.
+ * @param {object} currentMessage - El mensaje actual que se va a renderizar.
+ * @param {object} previousMessage - El mensaje anterior en la cronología.
+ * @returns {HTMLElement|null} El elemento del separador o null.
+ */
+function createDateSeparatorIfNeeded(currentMessage, previousMessage) {
+    if (!currentMessage || !currentMessage.timestamp) return null;
+
+    const currentDate = new Date(currentMessage.timestamp);
+
+    // Si no hay mensaje previo, siempre se muestra la fecha del primero.
+    if (!previousMessage || !previousMessage.timestamp) {
+        const separator = document.createElement('div');
+        separator.className = 'date-separator';
+        separator.textContent = formatDateSeparator(currentDate);
+        return separator;
+    }
+
+    const previousDate = new Date(previousMessage.timestamp);
+
+    // Comprobar si son de días diferentes
+    if (currentDate.toDateString() !== previousDate.toDateString()) {
+        const separator = document.createElement('div');
+        separator.className = 'date-separator';
+        separator.textContent = formatDateSeparator(currentDate);
+        return separator;
+    }
+
+    return null;
+}
+
+/**
+ * CORRECCIÓN: Nueva función centralizada para insertar todos los separadores de fecha.
+ * Recorre los mensajes existentes en el DOM y añade los separadores donde corresponde.
+ */
+function insertDateSeparatorsForExistingMessages() {
+    // 1. Eliminar todos los separadores existentes para evitar duplicados.
+    chatMessages.querySelectorAll('.date-separator').forEach(sep => sep.remove());
+
+    // 2. Recorrer los mensajes y volver a insertar los separadores.
+    const messageElements = Array.from(chatMessages.querySelectorAll('.message-wrapper'));
+    let previousMessage = null;
+    messageElements.forEach(msgElement => {
+        const currentMessage = allMessages[msgElement.id];
+        const separator = createDateSeparatorIfNeeded(currentMessage, previousMessage);
+        if (separator) msgElement.before(separator);
+        previousMessage = currentMessage;
+    });
+}
+/**
+ * NUEVO: Formatea la fecha para mostrarla en el separador.
+ * @param {Date} date - El objeto Date a formatear.
+ * @returns {string} La fecha formateada como "HOY", "AYER" o "DÍA MES AÑO".
+ */
+function formatDateSeparator(date) {
+    const today = new Date();
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+
+    if (date.toDateString() === today.toDateString()) return 'HOY';
+    if (date.toDateString() === yesterday.toDateString()) return 'AYER';
+    return date.toLocaleDateString('es-ES', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
 function handleChatScroll() {
@@ -1393,9 +1750,151 @@ function handleChatScroll() {
     }
 }
 
+// ------------------------------------------------------------------
+// --- 9. LÓGICA DE BÚSQUEDA DE MENSAJES (NUEVO) ---
+// ------------------------------------------------------------------
+
+function openSearch() {
+    if (!activeChatUser) return;
+    isSearchActive = true;
+    searchBar.style.display = 'flex';
+    chatHeader.style.display = 'none'; // Ocultar la cabecera normal
+    searchInput.focus();
+    // Deshabilitar acciones de mensajes mientras se busca
+    document.querySelectorAll('.message-wrapper').forEach(el => el.classList.add('search-active'));
+}
+
+function closeSearch() {
+    isSearchActive = false;
+    searchBar.style.display = 'none';
+    chatHeader.style.display = 'flex'; // Mostrar la cabecera normal
+    searchInput.value = '';
+    inputArea.style.display = 'block'; // Mostrar de nuevo el área de input
+    searchResults = [];
+    currentSearchResultIndex = -1;
+    searchResultsCount.textContent = '0/0';
+    // Limpiar todos los resaltados
+    document.querySelectorAll('mark.search-highlight').forEach(mark => {
+        const parent = mark.parentNode;
+        parent.replaceChild(document.createTextNode(mark.textContent), mark);
+        parent.normalize(); // Une nodos de texto adyacentes
+    });
+    document.querySelectorAll('.message-wrapper.current-search-hit').forEach(el => {
+        el.classList.remove('current-search-hit');
+    });
+    // Habilitar acciones de mensajes de nuevo
+    document.querySelectorAll('.message-wrapper').forEach(el => el.classList.remove('search-active'));
+
+    // Restaurar la vista de chat paginada
+    loadMessages(true);
+}
+
+function executeSearch() {
+    const searchTerm = searchInput.value.trim().toLowerCase();
+    if (searchTerm.length < 2) {
+        searchResults = [];
+        currentSearchResultIndex = -1;
+        searchResultsCount.textContent = '0/0';
+        return;
+    }
+
+    searchResults = [];
+    chatMessages.innerHTML = ''; // Limpiar la vista antes de mostrar resultados
+
+    // Busca en todos los mensajes del chat activo, no solo los cargados
+    const reversedMessageIds = [...chatMessageIds].reverse(); // Empezar por los más recientes
+    for (const msgId of reversedMessageIds) {
+        const message = allMessages[msgId];
+        if (message && message.text.toLowerCase().includes(searchTerm)) {
+            searchResults.push(msgId);
+        }
+    }
+
+    if (searchResults.length > 0) {
+        // Renderizar todos los resultados encontrados
+        searchResults.forEach(id => renderAndAppendMessage(id, allMessages[id]));
+        // Navegar al primer resultado (el más reciente)
+        currentSearchResultIndex = 0;
+        navigateToSearchResult(0);
+    } else {
+        currentSearchResultIndex = -1;
+        searchResultsCount.textContent = '0/0';
+        alert('No se encontraron resultados.');
+    }
+}
+
+function navigateToSearchResult(index) {
+    if (index < 0 || index >= searchResults.length) return;
+
+    currentSearchResultIndex = index;
+    const messageId = searchResults[index];
+
+    // Limpiar resaltado anterior
+    document.querySelectorAll('.message-wrapper.current-search-hit').forEach(el => {
+        el.classList.remove('current-search-hit');
+    });
+
+    const messageElement = document.getElementById(messageId);
+
+    if (messageElement) {
+        // Resaltar el texto en el elemento encontrado
+        highlightTextInNode(messageElement, searchInput.value.trim());
+
+        // Scroll y resaltado del mensaje
+        messageElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        messageElement.classList.add('current-search-hit');
+        
+        // Actualizar contador
+        searchResultsCount.textContent = `${index + 1}/${searchResults.length}`;
+    } 
+}
+
+function highlightTextInNode(node, searchTerm) {
+    // Primero, limpiar resaltados antiguos dentro de este nodo
+    node.querySelectorAll('mark.search-highlight').forEach(mark => {
+        const parent = mark.parentNode;
+        parent.replaceChild(document.createTextNode(mark.textContent), mark);
+        parent.normalize();
+    });
+
+    const textNodes = [];
+    const walk = document.createTreeWalker(node, NodeFilter.SHOW_TEXT, null, false);
+    let n;
+    while (n = walk.nextNode()) {
+        textNodes.push(n);
+    }
+
+    textNodes.forEach(textNode => {
+        const text = textNode.nodeValue;
+        const regex = new RegExp(`(${searchTerm.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&')})`, 'gi');
+        if (regex.test(text)) {
+            const fragment = document.createDocumentFragment();
+            text.split(regex).forEach((part, i) => {
+                if (i % 2 === 1) { // Es el término de búsqueda
+                    const mark = document.createElement('mark');
+                    mark.className = 'search-highlight';
+                    mark.textContent = part;
+                    fragment.appendChild(mark);
+                } else if (part) {
+                    fragment.appendChild(document.createTextNode(part));
+                }
+            });
+            textNode.parentNode.replaceChild(fragment, textNode);
+        }
+    });
+}
+
+// --- Event Listeners para Búsqueda ---
 
 // INICIALIZACIÓN
 document.addEventListener('DOMContentLoaded', () => {
+    // --- Event Listeners para Búsqueda (Corregido) ---
+    if (searchInChatButton) searchInChatButton.addEventListener('click', openSearch);
+    if (closeSearchButton) closeSearchButton.addEventListener('click', closeSearch);
+    if (searchInput) searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); executeSearch(); } });
+    if (prevResultButton) prevResultButton.addEventListener('click', () => navigateToSearchResult(currentSearchResultIndex - 1));
+    if (nextResultButton) nextResultButton.addEventListener('click', () => navigateToSearchResult(currentSearchResultIndex + 1));
+
     const username = sessionStorage.getItem('username');
     if (username) {
         const userAvatarMain = document.getElementById('user-avatar-main');
@@ -1407,5 +1906,249 @@ document.addEventListener('DOMContentLoaded', () => {
     // **CORRECCIÓN: Llamar a autoResize en la carga inicial para el input/textarea**
     autoResize(); 
     
+    // **NUEVO: Habilitar el audio después de la primera interacción del usuario**
+    const enableAudio = () => {
+        if (!hasInteracted && notificationSound) {
+            notificationSound.play().then(() => {
+                notificationSound.pause();
+                notificationSound.currentTime = 0;
+            }).catch(error => {
+                console.log("El usuario debe interactuar con la página para habilitar el sonido.", error);
+            });
+            hasInteracted = true;
+            document.body.removeEventListener('click', enableAudio);
+        }
+    };
+    document.body.addEventListener('click', enableAudio);
+
     renderConversationsList();
 });
+
+// ==========================================================
+// --- 10. LÓGICA DE ELIMINACIÓN DE MENSAJES DE CHAT (NUEVO) ---
+// ==========================================================
+
+if (deleteChatMessagesButton) {
+    deleteChatMessagesButton.addEventListener('click', () => {
+        if (!activeChatUser) {
+            alert("Por favor, selecciona un chat para poder eliminar sus mensajes.");
+            return;
+        }
+
+        if (confirm(`¿Estás seguro de que quieres eliminar todos los mensajes de este chat con "${activeChatUser}"? Esta acción no se puede deshacer.`)) {
+            deleteMessagesForCurrentChat();
+        }
+    });
+}
+
+/**
+ * Elimina todos los mensajes del chat activo de la base de datos y de la vista.
+ */
+function deleteMessagesForCurrentChat() {
+    if (!activeChatUser || chatMessageIds.length === 0) {
+        return; // No hay nada que borrar
+    }
+
+    const updates = {};
+    // Prepara una actualización masiva para borrar todos los mensajes a la vez
+    chatMessageIds.forEach(id => {
+        updates[`messages/${id}`] = null; // Poner a null un path en Firebase lo elimina
+    });
+
+    update(ref(database), updates)
+        .then(() => {
+            console.log(`Mensajes del chat con ${activeChatUser} eliminados.`);
+            // No es necesario limpiar la UI manualmente, ya que el listener `onChildRemoved`
+            // se encargará de quitar cada mensaje de la vista y de `allMessages`.
+        })
+        .catch(error => console.error("Error al eliminar los mensajes del chat:", error));
+}
+
+// ==========================================================
+// --- 10. LÓGICA DEL MODAL DE ESTADÍSTICAS (NUEVO) ---
+// ==========================================================
+
+let wordChart = null; // Variable para mantener la instancia del gráfico
+
+/**
+ * Abre el modal de estadísticas y carga los datos.
+ */
+const openStatsModal = () => {
+    if (!activeChatUser) {
+        alert("Por favor, selecciona un chat para ver sus estadísticas.");
+        return;
+    }
+    statsModal.classList.add('show');
+    loadChatStatistics(); 
+};
+
+/**
+ * Cierra el modal de estadísticas y limpia el gráfico.
+ */
+const closeStatsModal = () => {
+    statsModal.classList.remove('show');
+    // Destruye el gráfico anterior para evitar problemas al reabrir
+    if (wordChart) {
+        wordChart.destroy();
+        wordChart = null;
+    }
+};
+
+// --- Event Listeners para el modal ---
+if (statsButton) statsButton.addEventListener('click', openStatsModal);
+if (closeModalButton) closeModalButton.addEventListener('click', closeStatsModal);
+
+// Cierra el modal si se hace clic en el overlay (fondo oscuro)
+if (statsModal) {
+    statsModal.addEventListener('click', (event) => {
+        if (event.target === statsModal) {
+            closeStatsModal();
+        }
+    });
+}
+
+/**
+ * Calcula y muestra todas las estadísticas para el chat activo.
+ */
+function loadChatStatistics() {
+    // 1. OBTENER LOS MENSAJES RELEVANTES
+    const relevantMessages = chatMessageIds.map(id => allMessages[id]);
+
+    if (!relevantMessages || relevantMessages.length === 0) {
+        creationDateEl.textContent = 'N/A';
+        messageCountEl.textContent = '0';
+        streakCountEl.textContent = '0 días';
+        chatDurationEl.textContent = '0 horas';
+        if (wordChart) wordChart.destroy();
+        wordChartCanvas.getContext('2d').clearRect(0, 0, wordChartCanvas.width, wordChartCanvas.height);
+        return;
+    }
+
+    // 2. CALCULAR ESTADÍSTICAS
+    // Fecha de creación (timestamp del primer mensaje)
+    const creationTimestamp = relevantMessages[0].timestamp;
+    const creationDate = new Date(creationTimestamp).toLocaleDateString('es-ES', {
+        year: 'numeric', month: 'long', day: 'numeric'
+    });
+
+    // Total de mensajes
+    const totalMessages = relevantMessages.length;
+
+    // Racha actual
+    const streakKey = [currentUser, activeChatUser].sort().join('_');
+    const streakData = STREAKS_DATA[streakKey];
+    const currentStreak = streakData ? streakData.count : 0;
+
+    // Duración de la conversación (desde el primer al último mensaje)
+    // **NUEVO: Obtener la duración desde Firebase**
+    const durationKey = [currentUser, activeChatUser].sort().join('_');
+    const totalDurationMs = CHAT_DURATIONS[durationKey] || 0;
+    // Convertir a minutos y redondear
+    const totalMinutes = Math.round(totalDurationMs / (1000 * 60));
+
+
+    // Top 5 palabras más repetidas
+    const wordCounts = {};
+    // Lista de palabras comunes en español a ignorar
+    const stopWords = new Set(['de', 'la', 'el', 'en', 'y', 'a', 'los', 'las', 'un', 'una', 'con', 'por', 'para', 'qué', 'que', 'es', 'está', 'muy', 'mi', 'tu', 'su', 'al', 'del', 'no', 'si', 'pero', 'o', 'se', 'lo', 'me', 'te']);
+
+    relevantMessages.forEach(msg => {
+        // Usamos una expresión regular para encontrar solo palabras (incluyendo acentos)
+        const words = msg.text.toLowerCase().match(/[\p{L}]+/gu) || [];
+        words.forEach(word => {
+            if (word.length > 2 && !stopWords.has(word) && isNaN(word)) { // Ignorar palabras cortas, stop words y números
+                wordCounts[word] = (wordCounts[word] || 0) + 1;
+            }
+        });
+    });
+
+    const sortedWords = Object.entries(wordCounts)
+        .sort(([, a], [, b]) => b - a)
+        .slice(0, 5);
+
+    // 3. MOSTRAR ESTADÍSTICAS EN EL MODAL
+    creationDateEl.textContent = creationDate;
+    messageCountEl.textContent = totalMessages;
+    streakCountEl.textContent = `${currentStreak} ${currentStreak === 1 ? 'día' : 'días'}`;
+    chatDurationEl.textContent = `${totalMinutes} ${totalMinutes === 1 ? 'minuto' : 'minutos'}`;
+
+    // 4. RENDERIZAR EL GRÁFICO
+    if (wordChart) {
+        wordChart.destroy(); // Destruir el gráfico anterior si existe
+    }
+    
+    // No renderizar el gráfico si no hay palabras que mostrar
+    if (sortedWords.length === 0) {
+        wordChartCanvas.getContext('2d').clearRect(0, 0, wordChartCanvas.width, wordChartCanvas.height);
+        return;
+    }
+
+    wordChart = new Chart(wordChartCanvas, {
+        type: 'bar',
+        data: {
+            labels: sortedWords.map(item => item[0]),
+            datasets: [{
+                label: 'Repeticiones',
+                data: sortedWords.map(item => item[1]),
+                backgroundColor: 'rgba(0, 132, 255, 0.7)',
+                borderColor: 'rgba(0, 132, 255, 1)',
+                borderWidth: 1,
+                borderRadius: 4,
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            indexAxis: 'y', // Hace el gráfico de barras horizontal para mejor legibilidad
+            scales: {
+                x: {
+                    // **CORRECCIÓN: El eje debe existir para que el gráfico tenga límites, pero lo hacemos invisible.**
+                    display: true, // El eje existe
+                    ticks: {
+                       stepSize: 1, // Asegura que la escala sea de 1 en 1 si los números son pequeños
+                       // Hacemos las etiquetas del eje invisibles
+                       color: 'transparent' 
+                    },
+                    beginAtZero: true,
+                    grid: {
+                        // Ocultar las líneas de la rejilla para un look más limpio
+                        display: false,
+                        drawBorder: false // También ocultamos el borde del eje
+                    }
+                },
+                y: {
+                    ticks: {
+                        color: getComputedStyle(document.body).getPropertyValue('--text-primary') // Color de texto adaptable
+                    }
+                }
+            },
+            plugins: {
+                legend: {
+                    display: false // Oculta la leyenda 'Repeticiones', no es necesaria
+                },
+                // **CORRECCIÓN: Ajustes para mostrar el valor FUERA de la barra**
+                datalabels: {
+                    anchor: 'end', // Posiciona la etiqueta al final de la barra
+                    align: 'end',  // Alinea el texto al final de la etiqueta (efectivamente, a la derecha de la barra)
+                    padding: {
+                        left: 8 // Espacio entre el final de la barra y el número
+                    },
+                    // Usamos el color de texto secundario del tema para que se vea bien en claro/oscuro
+                    color: getComputedStyle(document.body).getPropertyValue('--text-secondary'),
+                    font: {
+                        weight: '600'
+                    },
+                    formatter: (value) => {
+                        return value; // Muestra el valor numérico de la repetición
+                    }
+                },
+                // **NUEVO: Configuración para mejorar el tooltip al pasar el ratón**
+                tooltip: {
+                    callbacks: {
+                        label: (context) => `${context.label}: ${context.raw} ${context.raw === 1 ? 'vez' : 'veces'}`
+                    }
+                }
+            }
+        }
+    });
+}

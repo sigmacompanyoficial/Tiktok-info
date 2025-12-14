@@ -100,3 +100,58 @@ body {
 #send-button:hover {
     background-color: #0056b3;
 }
+
+/* --- Estilos para la Notificación Toast (Móvil y Escritorio) --- */
+
+/* Contenedor principal de la notificación */
+#notification-toast {
+    position: fixed; /* Fijo en la pantalla */
+    z-index: 1000;   /* Asegura que esté por encima de otros elementos */
+    background-color: #2c3e50; /* Un color de fondo oscuro */
+    color: white;
+    padding: 15px 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    display: none; /* Oculto por defecto, JS lo cambiará a 'flex' */
+    align-items: center;
+    gap: 15px;
+    transition: top 0.4s ease-in-out, right 0.4s ease-in-out, transform 0.4s ease-in-out, opacity 0.4s;
+    cursor: pointer;
+
+    /* --- Estilos por defecto para MÓVIL --- */
+    top: -150px; /* Oculto por defecto arriba de la pantalla */
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 30px); /* Ancho casi completo con un pequeño margen */
+    max-width: 450px;
+}
+
+/* Cuando la notificación se muestra en MÓVIL */
+#notification-toast.show {
+    top: 15px; /* Aparece desde arriba */
+}
+
+/* --- Estilos para ESCRITORIO (pantallas más anchas de 900px) --- */
+@media (min-width: 901px) {
+    #notification-toast {
+        /* Movemos la notificación a la esquina superior derecha */
+        left: auto; /* Reseteamos 'left' */
+        right: -400px; /* Oculto por defecto a la derecha de la pantalla */
+        top: 20px;
+        transform: none; /* Reseteamos la transformación horizontal */
+        width: auto;
+        min-width: 350px;
+        max-width: 400px;
+    }
+
+    /* Cuando la notificación se muestra en ESCRITORIO */
+    #notification-toast.show {
+        right: 20px; /* Aparece desde la derecha */
+        top: 20px;   /* Mantenemos la posición superior */
+    }
+}
+
+/* Nota: Los estilos para los elementos internos como #toast-avatar-initial, 
+   .toast-content, etc., deberían estar en el CSS principal de tu chat, 
+   ya que no estaban en el style.css original. Si no los tienes, 
+   puedes añadirlos aquí también. */

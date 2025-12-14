@@ -6,6 +6,8 @@
     <title>Sigma Chat</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
 <style>
     * {
         margin: 0;
@@ -81,12 +83,35 @@
         padding: 16px 20px;
         border-bottom: 1px solid var(--border-color);
         display: flex;
-        align-items: center;
-        justify-content: space-between;
+        flex-direction: column; /* Cambiado para apilar elementos */
+        gap: 12px; /* Espacio entre título y búsqueda */
         background: var(--white);
         position: sticky;
         top: 0;
         z-index: 10;
+    }
+
+    .sidebar-header-top {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    /* --- NUEVO: Estilo para el campo de búsqueda --- */
+    #user-search-input {
+        width: 100%;
+        border: none;
+        background: var(--secondary-color);
+        color: var(--text-primary);
+        border-radius: 18px;
+        padding: 8px 16px;
+        font-size: 14px;
+        font-family: inherit;
+    }
+
+    #user-search-input:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--primary-color);
     }
 
     .sidebar-header h2 {
@@ -122,6 +147,11 @@
 
     .icon-button:active {
         transform: scale(0.95);
+    }
+
+    .icon-button.danger:hover {
+        background: #ff4d4d;
+        color: white;
     }
 
     .conversations-container {
@@ -198,6 +228,21 @@
         white-space: nowrap;
     }
     
+    /* --- NUEVO: Estilo para el indicador de racha --- */
+    .streak-indicator {
+        color: #ff4d4d; /* Color rojo para el fuego */
+        font-weight: 600;
+        margin-right: 4px;
+        animation: pulse 1.5s infinite; /* Animación sutil */
+    }
+
+    /* --- NUEVO: Estilo para racha en periodo de gracia --- */
+    .streak-indicator.grace-period {
+        color: var(--text-secondary); /* Color gris secundario */
+        animation: none; /* Sin animación para indicar que está en peligro */
+        opacity: 0.8;
+    }
+
     .unread-count-placeholder {
         color: var(--primary-color);
         font-weight: 600;
@@ -287,11 +332,21 @@
         text-transform: uppercase;
     }
 
+    .contact-details {
+        display: flex;
+        flex-direction: column;
+    }
+
     .contact-details h3 {
         font-size: 16px;
         font-weight: 600;
         color: var(--text-primary);
-        margin-bottom: 2px;
+    }
+
+    .contact-name-wrapper {
+        display: flex;
+        align-items: center;
+        gap: 8px;
     }
 
     .contact-status-text {
@@ -667,6 +722,19 @@
         }
     }
 
+    /* --- NUEVO: Animación para el indicador de racha --- */
+    @keyframes pulse {
+        0% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.1);
+        }
+        100% {
+            transform: scale(1);
+        }
+    }
+
     /* INPUT AREA */
     .input-area {
         padding: 12px 20px;
@@ -991,50 +1059,51 @@
 
     /* --- NOTIFICACIÓN TOAST (Show Modal) --- */
     #notification-toast {
-        position: fixed;
-        top: 20px;
-        right: 20px;
-        z-index: 200;
-        /* Adapta los colores al modo oscuro */
-        background: var(--white); 
-        color: var(--text-primary);
-        border-radius: 12px;
-        box-shadow: var(--shadow-lg);
-        padding: 15px 20px;
-        max-width: 320px;
-        display: none; /* Oculto por defecto */
-        opacity: 0;
-        transform: translateX(100%); /* Oculto a la derecha */
-        transition: opacity 0.4s, transform 0.4s;
-        border: 1px solid var(--border-color);
-        cursor: pointer;
+    position: fixed; /* Fijo en la pantalla */
+    z-index: 200;   /* Asegura que esté por encima de otros elementos */
+    background: var(--white);
+    color: var(--text-primary);
+    padding: 15px 20px;
+    border-radius: 12px;
+    box-shadow: var(--shadow-lg);
+    display: none; /* Oculto por defecto, JS lo cambiará a 'flex' */
+    align-items: center;
+    gap: 15px;
+    transition: top 0.4s ease-in-out, right 0.4s ease-in-out, transform 0.4s ease-in-out, opacity 0.4s;
+    cursor: pointer;
+    border: 1px solid var(--border-color);
+
+    /* --- Estilos por defecto para MÓVIL --- */
+    top: -150px; /* Oculto por defecto arriba de la pantalla */
+    left: 50%;
+    transform: translateX(-50%);
+    width: calc(100% - 30px); /* Ancho casi completo con un pequeño margen */
+    max-width: 450px;
     }
 
+    /* Cuando la notificación se muestra en MÓVIL */
     #notification-toast.show {
-        display: flex;
-        opacity: 1;
-        transform: translateX(0); /* Muestra el toast deslizándose */
+    top: 15px; /* Aparece desde arriba */
+    display: flex; /* Aseguramos que sea visible */
     }
 
-    .toast-content {
-        display: flex;
-        align-items: center;
-        gap: 12px;
+    /* --- Estilos para ESCRITORIO (pantallas más anchas de 900px) --- */
+    @media (min-width: 901px) {
+    #notification-toast {
+        /* Movemos la notificación a la esquina superior derecha */
+        left: auto; /* Reseteamos 'left' */
+        right: -400px; /* Oculto por defecto a la derecha de la pantalla */
+        top: 20px;
+        transform: none; /* Reseteamos la transformación horizontal */
+        width: auto;
+        min-width: 320px;
     }
 
-    .toast-avatar {
-        width: 40px;
-        height: 40px;
-        border-radius: 50%;
-        background: var(--primary-color);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        color: white;
-        font-weight: 600;
-        font-size: 18px;
-        flex-shrink: 0;
-        text-transform: uppercase;
+    /* Cuando la notificación se muestra en ESCRITORIO */
+    #notification-toast.show {
+        right: 20px; /* Aparece desde la derecha */
+        top: 20px;   /* Mantenemos la posición superior */
+    }
     }
 
     .toast-details {
@@ -1058,19 +1127,95 @@
         overflow: hidden;
         text-overflow: ellipsis;
     }
-    /* MOBILE ADJUSTMENTS: aparece desde abajo en móvil */
-    @media (max-width: 600px) {
-        #notification-toast {
-            top: auto;
-            bottom: 20px;
-            right: 50%;
-            left: 50%;
-            transform: translateX(-50%) translateY(100%); /* Oculto abajo y centrado */
-            max-width: 90%;
-        }
-        #notification-toast.show {
-            transform: translateX(-50%) translateY(0);
-        }
+
+    /* --- ESTILOS PARA EL MODAL DE ESTADÍSTICAS --- */
+    .stats-modal-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: rgba(0, 0, 0, 0.6);
+        display: none; /* Oculto por defecto */
+        align-items: center;
+        justify-content: center;
+        z-index: 1000;
+        backdrop-filter: blur(5px);
+    }
+
+    .stats-modal-overlay.show {
+        display: flex;
+    }
+
+    .stats-modal-content {
+        background: var(--white);
+        color: var(--text-primary);
+        padding: 25px;
+        border-radius: 12px;
+        box-shadow: var(--shadow-lg);
+        width: 90%;
+        max-width: 500px;
+        max-height: 90vh;
+        overflow-y: auto;
+        position: relative;
+    }
+
+    .stats-modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        border-bottom: 1px solid var(--border-color);
+        padding-bottom: 15px;
+        margin-bottom: 20px;
+    }
+
+    .stats-modal-header h3 {
+        font-size: 20px;
+        font-weight: 700;
+    }
+
+    .stats-modal-close {
+        font-size: 24px;
+        cursor: pointer;
+        color: var(--text-secondary);
+        background: none;
+        border: none;
+    }
+
+    .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 15px;
+        margin-bottom: 25px;
+    }
+
+    .stat-item {
+        background: var(--secondary-color);
+        padding: 15px;
+        border-radius: 8px;
+        text-align: center;
+    }
+
+    /* --- NUEVO: Contenedor para la gráfica --- */
+    .chart-container {
+        position: relative;
+        height: 250px; /* Altura fija para el contenedor del gráfico */
+        width: 100%;
+        margin-top: 10px;
+    }
+</style>
+<!-- NUEVO: Estilo para el separador de fecha -->
+<style>
+    .date-separator {
+        align-self: center;
+        background: var(--secondary-color);
+        color: var(--text-secondary);
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+        margin: 16px 0 8px;
+        text-transform: uppercase;
     }
 </style>
 </head>
@@ -1093,10 +1238,13 @@
             </div>
 
             <div class="sidebar-header">
-                <h2>Chats</h2>
-                <button class="icon-button" id="clear-all-button" title="Limpiar todo">
-                    <i class="fas fa-trash-alt"></i>
-                </button>
+                <div class="sidebar-header-top">
+                    <h2>Chats</h2>
+                    <button class="icon-button" id="clear-all-button" title="Limpiar todo">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                </div>
+                <input type="text" id="user-search-input" placeholder="Buscar o empezar un chat nuevo...">
             </div>
 
             <div class="conversations-container" id="conversations-container">
@@ -1108,11 +1256,42 @@
                 <div class="contact-info">
                     <div class="chat-contact-avatar" id="chat-contact-avatar">U</div>
                     <div class="contact-details">
-                        <h3 id="current-chat-name">Selecciona un chat</h3>
+                        <div class="contact-name-wrapper">
+                            <h3 id="current-chat-name">Selecciona un chat</h3>
+                            <span id="header-streak-indicator"></span>
+                        </div>
                         <span class="contact-status-text" id="contact-status-text">Desconectado</span>
                     </div>
                 </div>
+                <div class="chat-header-actions">
+                    <!-- NUEVO: Botón para abrir la búsqueda -->
+                    <button class="icon-button" id="search-in-chat-button" title="Buscar en el chat">
+                        <i class="fas fa-search"></i>
+                    </button>
+                    <button class="icon-button" id="chat-stats-button" title="Ver estadísticas del chat">
+                        <i class="fas fa-chart-line"></i>
+                    </button>
+                    <button class="icon-button danger" id="delete-chat-messages-button" title="Eliminar mensajes del chat">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
             </div>
+
+            <!-- NUEVO: Barra de búsqueda (oculta por defecto) -->
+            <div id="search-bar" style="display: none; padding: 12px 20px; border-bottom: 1px solid var(--border-color); align-items: center; gap: 8px; background: var(--white);">
+                <input type="text" id="search-input" placeholder="Buscar mensajes..." style="flex-grow: 1; background: var(--secondary-color); border: none; border-radius: 18px; padding: 8px 12px; color: var(--text-primary);">
+                <span id="search-results-count" style="font-size: 12px; color: var(--text-secondary); min-width: 40px; text-align: center;">0/0</span>
+                <button id="prev-result-button" class="icon-button" title="Resultado anterior" style="width: 32px; height: 32px;">
+                    <i class="fas fa-chevron-up"></i>
+                </button>
+                <button id="next-result-button" class="icon-button" title="Siguiente resultado" style="width: 32px; height: 32px;">
+                    <i class="fas fa-chevron-down"></i>
+                </button>
+                <button id="close-search-button" class="icon-button" title="Cerrar búsqueda" style="width: 32px; height: 32px;">
+                    <i class="fas fa-times"></i>
+                </button>
+            </div>
+            <!-- FIN BARRA DE BÚSQUEDA -->
 
             <div class="chat-messages" id="chat-messages">
                 </div>
@@ -1154,6 +1333,40 @@
         </div>
     </div>
     
+    <!-- Modal de Estadísticas -->
+    <div id="stats-modal" class="stats-modal-overlay">
+        <div class="stats-modal-content">
+            <div class="stats-modal-header">
+                <h3>Estadísticas del Chat</h3>
+                <button id="stats-modal-close" class="stats-modal-close">&times;</button>
+            </div>
+            <div class="stats-body">
+                <div class="stats-grid">
+                    <div class="stat-item">
+                        <h4>Creación del Chat</h4>
+                        <p id="stats-creation-date">-</p>
+                    </div>
+                    <div class="stat-item">
+                        <h4>Mensajes Enviados</h4>
+                        <p id="stats-message-count">-</p>
+                    </div>
+                    <div class="stat-item">
+                        <h4>Racha Actual</h4>
+                        <p id="stats-streak-count">-</p>
+                    </div>
+                    <div class="stat-item">
+                        <h4>Duración del Chat</h4>
+                        <p id="stats-chat-duration">-</p>
+                    </div>
+                </div>
+                <h4 style="margin-top: 20px;">Top 5 Palabras Más Usadas</h4>
+                <div class="chart-container">
+                    <canvas id="word-chart"></canvas>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="notification-toast">
         <div class="toast-content">
             <div class="toast-avatar" id="toast-avatar-initial"></div>
@@ -1163,6 +1376,8 @@
             </div>
         </div>
     </div>
+
+    <audio id="notification-sound" src="notification.mp3" preload="auto"></audio>
 
     <script type="module" src="chat.js"></script>
     <script>
