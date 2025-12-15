@@ -7,6 +7,10 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <script type="module" src="https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- NUEVO: Importar la fuente de emojis estilo Apple/iPhone -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Color+Emoji&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.0.0"></script>
 <style>
     * {
@@ -52,7 +56,7 @@
     }
 
     body {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif, 'Noto Color Emoji';
         background: var(--bg-color);
         color: var(--text-primary);
         overflow: hidden;
@@ -356,6 +360,50 @@
 
     .contact-status-text.online {
         color: var(--online-color);
+    }
+
+    /* --- NUEVO: Estilo para la hora local del contacto --- */
+    .contact-local-time {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        background: var(--secondary-color);
+        padding: 2px 8px;
+        border-radius: 8px;
+        margin-left: auto; /* Lo empuja a la derecha */
+    }
+
+    .mobile-actions-menu {
+        position: absolute;
+        top: calc(100% + 8px);
+        right: 0;
+        background: var(--white);
+        border-radius: 8px;
+        box-shadow: var(--shadow-lg);
+        border: 1px solid var(--border-color);
+        z-index: 110;
+        overflow: hidden;
+        display: none; /* Oculto hasta que se active */
+        flex-direction: column;
+        width: 200px;
+    }
+
+    .mobile-actions-menu.show {
+        display: flex;
+    }
+
+    .mobile-actions-menu .menu-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 15px;
+        cursor: pointer;
+        transition: background 0.2s;
+        color: var(--text-primary);
+    }
+
+    .mobile-actions-menu .menu-item:hover {
+        background: var(--hover-bg);
     }
 
     .chat-header-actions {
@@ -959,12 +1007,7 @@
         .mobile-back-button {
             display: flex;
         }
-
-        .message-wrapper {
-            max-width: 85%;
-        }
-
-        /* Ocultar acciones por defecto en móvil */
+        
         .message-actions {
             display: none;
             opacity: 0;
@@ -976,12 +1019,11 @@
             margin-left: 40px; 
         }
 
-
-        #emoji-picker-container {
-            right: 0;
-            left: 0;
-            bottom: calc(100% + 5px);
+        /* --- NUEVO: Ocultar prefijo de la hora en móvil --- */
+        .contact-local-time .time-prefix {
+            display: none;
         }
+
     }
 
     @media (max-width: 480px) {
@@ -995,6 +1037,38 @@
 
         .input-area {
             padding: 8px 12px;
+        }
+
+        /* --- NUEVO: Ajustes adicionales para móviles pequeños --- */
+        .conversation-item {
+            padding: 8px 12px; /* Menos padding vertical y horizontal */
+        }
+
+        .contact-avatar {
+            width: 48px; /* Avatar de la lista más pequeño */
+            height: 48px;
+            font-size: 20px;
+        }
+
+        .chat-name {
+            font-size: 14px; /* Nombre del chat más pequeño */
+        }
+
+        .last-message, .last-time {
+            font-size: 12px; /* Texto secundario más pequeño */
+        }
+
+        .message-content {
+            padding: 6px 10px; /* Burbujas de mensaje más compactas */
+            border-radius: 16px;
+        }
+
+        .message-text {
+            font-size: 14px; /* Texto del mensaje más pequeño */
+        }
+
+        #message-input {
+            font-size: 14px; /* Texto del input más pequeño */
         }
     }
 
@@ -1232,6 +1306,22 @@
         text-transform: uppercase;
     }
 </style>
+<!-- NUEVO: Estilo para el indicador de mensaje reenviado -->
+<style>
+    .forwarded-indicator {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12px;
+        font-style: italic;
+        opacity: 0.8;
+        margin-bottom: 6px;
+        color: var(--text-secondary);
+    }
+    .message-wrapper.sent .forwarded-indicator {
+        color: rgba(255, 255, 255, 0.8);
+    }
+</style>
 </head>
 <body class="dark-mode">
     <div class="app-container">
@@ -1273,21 +1363,20 @@
                         <div class="contact-name-wrapper">
                             <h3 id="current-chat-name">Selecciona un chat</h3>
                             <span id="header-streak-indicator"></span>
+                            <!-- NUEVO: Contenedor para la hora local -->
+                            <span id="contact-local-time"></span>
                         </div>
                         <span class="contact-status-text" id="contact-status-text">Desconectado</span>
                     </div>
                 </div>
                 <div class="chat-header-actions">
-                    <!-- NUEVO: Botón para abrir la búsqueda -->
-                    <button class="icon-button" id="search-in-chat-button" title="Buscar en el chat">
-                        <i class="fas fa-search"></i>
-                    </button>
-                    <button class="icon-button" id="chat-stats-button" title="Ver estadísticas del chat">
-                        <i class="fas fa-chart-line"></i>
-                    </button>
-                    <button class="icon-button danger" id="delete-chat-messages-button" title="Eliminar mensajes del chat">
-                        <i class="fas fa-trash"></i>
-                    </button>
+                    <!-- Botones de acción que se crearán dinámicamente si es necesario -->
+                    <!-- Botón y Menú Unificado para Móvil y Escritorio -->
+                    <div class="mobile-actions-wrapper">
+                        <button class="icon-button" id="mobile-options-button" title="Más opciones">
+                            <i class="fas fa-ellipsis-v"></i>
+                        </button>
+                    </div>
                 </div>
             </div>
 
@@ -1381,6 +1470,43 @@
         </div>
     </div>
 
+    <!-- NUEVO: Modal para Reenviar Mensajes -->
+    <div id="forward-modal" class="stats-modal-overlay">
+        <div class="stats-modal-content">
+            <div class="stats-modal-header">
+                <h3>Reenviar mensaje a...</h3>
+                <button id="forward-modal-close" class="stats-modal-close">&times;</button>
+            </div>
+            <div class="forward-body">
+                <input type="text" id="forward-search-input" placeholder="Buscar contacto..." style="width: 100%; padding: 8px 12px; border-radius: 18px; border: 1px solid var(--border-color); background: var(--secondary-color); color: var(--text-primary); margin-bottom: 15px;">
+                <div id="forward-contacts-list" style="max-height: 300px; overflow-y: auto;">
+                    <!-- La lista de contactos se generará aquí -->
+                </div>
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                    <button id="cancel-forward-button" style="padding: 10px 20px; border-radius: 8px; border: 1px solid var(--border-color); background: transparent; color: var(--text-primary); cursor: pointer;">Cancelar</button>
+                    <button id="send-forward-button" style="padding: 10px 20px; border-radius: 8px; border: none; background: var(--primary-color); color: white; cursor: pointer;" disabled>Reenviar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- NUEVO: Modal para Editar Mensajes -->
+    <div id="edit-modal" class="stats-modal-overlay">
+        <div class="stats-modal-content">
+            <div class="stats-modal-header">
+                <h3>Editar Mensaje</h3>
+                <button id="edit-modal-close" class="stats-modal-close">&times;</button>
+            </div>
+            <div class="edit-body">
+                <textarea id="edit-message-input" style="width: 100%; min-height: 100px; padding: 8px 12px; border-radius: 8px; border: 1px solid var(--border-color); background: var(--secondary-color); color: var(--text-primary); margin-bottom: 15px; resize: vertical;"></textarea>
+                <div style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px;">
+                    <button id="cancel-edit-button" style="padding: 10px 20px; border-radius: 8px; border: 1px solid var(--border-color); background: transparent; color: var(--text-primary); cursor: pointer;">Cancelar</button>
+                    <button id="save-edit-button" style="padding: 10px 20px; border-radius: 8px; border: none; background: var(--primary-color); color: white; cursor: pointer;">Guardar</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <div id="notification-toast">
         <div class="toast-avatar" id="toast-avatar-initial"></div>
         <div class="toast-details">
@@ -1401,6 +1527,48 @@
                     userAvatarMain.textContent = username.charAt(0).toUpperCase();
                 }
             }
+
+            // Lógica para el menú de acciones en móvil
+            const mobileOptionsButton = document.getElementById('mobile-options-button');
+            const chatHeaderActions = document.querySelector('.chat-header-actions');
+            let mobileMenu = null;
+
+            // --- NUEVO: Crear botones de acción ocultos para que el script pueda hacerles 'click' ---
+            const hiddenActions = document.createElement('div');
+            hiddenActions.style.display = 'none';
+            hiddenActions.innerHTML = `
+                <button id="search-in-chat-button"></button>
+                <button id="chat-stats-button"></button>
+                <button id="delete-chat-messages-button"></button>
+            `;
+            document.body.appendChild(hiddenActions);
+
+            mobileOptionsButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!mobileMenu) {
+                    mobileMenu = document.createElement('div');
+                    mobileMenu.className = 'mobile-actions-menu';
+                    mobileMenu.innerHTML = `
+                        <div class="menu-item" data-action="search-in-chat"><i class="fas fa-search fa-fw"></i> Buscar en el chat</div>
+                        <div class="menu-item" data-action="chat-stats"><i class="fas fa-chart-line fa-fw"></i> Ver estadísticas</div>
+                        <div class="menu-item" data-action="delete-chat-messages"><i class="fas fa-trash fa-fw"></i> Eliminar mensajes</div>
+                    `;
+                    document.querySelector('.mobile-actions-wrapper').appendChild(mobileMenu);
+
+                    mobileMenu.addEventListener('click', (event) => {
+                        const action = event.target.closest('.menu-item')?.dataset.action;
+                        if (action) {
+                            document.getElementById(`${action.replace(/-/g, '-')}-button`).click();
+                            mobileMenu.classList.remove('show');
+                        }
+                    });
+
+                    document.addEventListener('click', () => {
+                        mobileMenu?.classList.remove('show');
+                    });
+                }
+                mobileMenu.classList.toggle('show');
+            });
         });
     </script>
 </body>

@@ -62,6 +62,7 @@ const usernameDisplay = document.getElementById('username-display');
 const contactStatusText = document.getElementById('contact-status-text'); 
 const chatContactAvatar = document.getElementById('chat-contact-avatar'); 
 const headerStreakIndicator = document.getElementById('header-streak-indicator'); // **NUEVO: Indicador de racha en cabecera**
+const contactLocalTime = document.getElementById('contact-local-time'); // **NUEVO: Para la hora local**
 
 // --- ELEMENTOS DE BÚSQUEDA EN CHAT (NUEVO) ---
 const searchInChatButton = document.getElementById('search-in-chat-button');
@@ -97,6 +98,7 @@ let CHAT_DURATIONS = {}; // **NUEVO: Almacena las duraciones de los chats**
 let chatEnterTime = null; // **NUEVO: Timestamp de cuándo se entró al chat actual**
 let STREAKS_DATA = {}; // **NUEVA VARIABLE: Para almacenar datos de rachas**
 let timeUpdateInterval = null; // **NUEVA VARIABLE: Intervalo para actualizar el estado de conexión**
+let localTimeInterval = null; // **NUEVO: Intervalo para la hora local del contacto**
 
 // NUEVAS VARIABLES PARA PAGINACIÓN Y OPTIMIZACIÓN
 const MESSAGES_PER_PAGE = 15; // Lote de 15 mensajes
@@ -110,7 +112,6 @@ let currentSearchResultIndex = -1;
 let isSearchActive = false;
 
 // --- ELEMENTOS DEL MODAL DE ESTADÍSTICAS (NUEVO) ---
-const statsButton = document.getElementById('chat-stats-button');
 const statsModal = document.getElementById('stats-modal');
 const closeModalButton = document.getElementById('stats-modal-close');
 const creationDateEl = document.getElementById('stats-creation-date');
@@ -119,6 +120,24 @@ const streakCountEl = document.getElementById('stats-streak-count');
 const chatDurationEl = document.getElementById('stats-chat-duration');
 const wordChartCanvas = document.getElementById('word-chart');
 const deleteChatMessagesButton = document.getElementById('delete-chat-messages-button'); // **NUEVO**
+
+// --- ELEMENTOS DEL MODAL DE REENVÍO (NUEVO) ---
+const forwardModal = document.getElementById('forward-modal');
+const closeForwardModalButton = document.getElementById('forward-modal-close');
+const forwardContactsList = document.getElementById('forward-contacts-list');
+const forwardSearchInput = document.getElementById('forward-search-input');
+const cancelForwardButton = document.getElementById('cancel-forward-button');
+const sendForwardButton = document.getElementById('send-forward-button');
+let messageToForward = null; // Almacenará el mensaje a reenviar
+let forwardRecipient = null; // Almacenará el destinatario seleccionado
+
+// --- ELEMENTOS DEL MODAL DE EDICIÓN (NUEVO) ---
+const editModal = document.getElementById('edit-modal');
+const closeEditModalButton = document.getElementById('edit-modal-close');
+const editMessageInput = document.getElementById('edit-message-input');
+const cancelEditButton = document.getElementById('cancel-edit-button');
+const saveEditButton = document.getElementById('save-edit-button');
+let messageToEditId = null; // Almacenará el ID del mensaje a editar
 
 
 // ==========================================================
@@ -560,6 +579,11 @@ function setActiveChat(username) {
         clearInterval(timeUpdateInterval);
         timeUpdateInterval = null;
     }
+    if (localTimeInterval) { // **NUEVO: Limpiar intervalo de hora local**
+        clearInterval(localTimeInterval);
+        localTimeInterval = null;
+        if (contactLocalTime) contactLocalTime.style.display = 'none';
+    }
 
     // **NUEVO: Iniciar el cronómetro para el nuevo chat**
     chatEnterTime = Date.now();
@@ -613,6 +637,9 @@ function setActiveChat(username) {
     // 4. Actualizar el estado del contacto en el encabezado e INICIAR EL INTERVALO
     startContactStatusInterval(); // **CORRECCIÓN: Iniciar el intervalo de actualización de estado**
     updateHeaderStreak(); // **NUEVO: Actualizar la racha en la cabecera al cambiar de chat**
+
+    // **NUEVO: Iniciar el reloj de hora local si corresponde**
+    startLocalTimeClock();
     
     // 5. APLAZAR MARCAJE COMO LEÍDO (Mantener la lógica de estabilidad)
     setTimeout(() => {
@@ -645,6 +672,44 @@ function setActiveChat(username) {
     isTypingActive = false; 
     typingTimeout = null;
 }
+
+/**
+ * **NUEVO: Inicia un reloj en tiempo real si el chat es entre 'aynara' y 'dylan'.**
+ */
+function startLocalTimeClock() {
+    if (!contactLocalTime) return;
+
+    const isAynaraChattingWithDylan = caseInsensitiveEquals(currentUser, 'aynara') && caseInsensitiveEquals(activeChatUser, 'dylan');
+    const isDylanChattingWithAynara = caseInsensitiveEquals(currentUser, 'dylan') && caseInsensitiveEquals(activeChatUser, 'aynara');
+
+    if (isAynaraChattingWithDylan || isDylanChattingWithAynara) {
+        const timeZone = isAynaraChattingWithDylan ? 'Indian/Mauritius' : 'Europe/Madrid';
+        const countryName = isAynaraChattingWithDylan ? 'Mauricio' : 'España';
+        
+        const updateTime = () => {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('es-ES', { // Formato HH:MM:SS
+                timeZone: timeZone,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            contactLocalTime.innerHTML = `<span class="time-prefix"> </span>${countryName}: ${timeString}`;
+        };
+
+        // Mostrar el elemento y ejecutar la primera actualización
+        contactLocalTime.style.display = 'block';
+        updateTime();
+
+        // Iniciar el intervalo para actualizar cada segundo
+        localTimeInterval = setInterval(updateTime, 1000);
+
+    } else {
+        // Si no es el chat específico, ocultar el reloj
+        contactLocalTime.style.display = 'none';
+    }
+}
+
 
 /**
  * **NUEVO: Actualiza la duración total de un chat en Firebase.**
@@ -961,66 +1026,60 @@ if (messageForm && messageInput) {
  * @param {string} user2 - El otro usuario en el chat.
  */
 async function updateStreak(user1, user2) {
+    // Clave única para la racha entre dos usuarios, independientemente del orden.
     const streakKey = [user1, user2].sort().join('_');
     const streakDataRef = ref(database, `streaks/${streakKey}`);
     const now = Date.now();
-    const today = new Date(now).setHours(0, 0, 0, 0); // Timestamp para el inicio del día de hoy
+    const todayTimestamp = new Date(now).setHours(0, 0, 0, 0);
 
     try {
         const snapshot = await get(streakDataRef);
-        let streakData = snapshot.val();
+        const currentStreakData = snapshot.val() || { count: 0, lastInteraction: 0, participants: {} };
 
-            // Comprobar si el otro usuario ha participado
-        const otherUserLastMessage = streakData?.participants?.[user2] || 0;
-        const bothParticipated = (now - otherUserLastMessage) < 24 * 60 * 60 * 1000;
+        // Actualizar la marca de tiempo de la última participación del usuario actual.
+        currentStreakData.participants[user1] = now;
 
-        if (!streakData) {
-            // No hay racha, se prepara para iniciar una. El contador es 0 hasta que ambos participen.
-            streakData = {
-                count: 0,
-                lastInteraction: today,
-                participants: { [user1]: now }
-            };
+        const otherUserLastParticipation = currentStreakData.participants[user2] || 0;
+        const lastInteractionDay = new Date(currentStreakData.lastInteraction).setHours(0, 0, 0, 0);
+        
+        // Definimos el inicio del día de ayer.
+        const yesterdayTimestamp = new Date(todayTimestamp);
+        yesterdayTimestamp.setDate(yesterdayTimestamp.getDate() - 1);
+
+        // Condición 1: ¿Ambos usuarios han participado en las últimas 24 horas?
+        const bothParticipatedRecently = (now - otherUserLastParticipation) < (24 * 60 * 60 * 1000);
+
+        if (currentStreakData.count === 0) {
+            // Si no hay racha, se inicia a 1 solo si ambos han participado recientemente.
+            if (bothParticipatedRecently) {
+                currentStreakData.count = 1;
+                currentStreakData.lastInteraction = todayTimestamp;
+            }
         } else {
-            // Hay una racha existente, se actualiza.
-            const lastInteractionDay = new Date(streakData.lastInteraction).setHours(0, 0, 0, 0);
-            const yesterday = new Date(today).setDate(new Date(today).getDate() - 1);
-
-            // Actualizar la participación del usuario actual
-            streakData.participants = streakData.participants || {};
-            streakData.participants[user1] = now;
-            
-            // Si la racha no ha comenzado (count es 0) y ambos han participado, se inicia.
-            if (streakData.count === 0) {
-                if (bothParticipated) {
-                    streakData.count = 1; // ¡La racha comienza!
-                    streakData.lastInteraction = today; 
+            // Ya existe una racha.
+            if (bothParticipatedRecently) {
+                // Si la última interacción fue ayer, la racha aumenta.
+                if (lastInteractionDay === yesterdayTimestamp) {
+                    currentStreakData.count++;
+                    currentStreakData.lastInteraction = todayTimestamp;
+                } 
+                // Si la última interacción no fue hoy ni ayer, la racha se rompió. Se reinicia a 1.
+                else if (lastInteractionDay < yesterdayTimestamp) {
+                    currentStreakData.count = 1;
+                    currentStreakData.lastInteraction = todayTimestamp;
                 }
+                // Si la última interacción fue hoy, no se hace nada con el contador, solo se actualiza la participación.
             } else {
-                // La racha ya está activa (count > 0)
-                if (bothParticipated) {
-                    // Si la última interacción fue ayer (o hoy, reactivando la racha en gracia), se incrementa.
-                    if (lastInteractionDay === yesterday || (lastInteractionDay < today && streakData.count > 0)) {
-                        streakData.count++;
-                        streakData.lastInteraction = today;
-                    } else if (today - lastInteractionDay > 24 * 60 * 60 * 1000) {
-                        // La racha se rompió porque pasó más de 48h, se reinicia.
-                        streakData.count = 1;
-                        streakData.lastInteraction = today;
-                    }
-                    // Si la interacción es en el mismo día, no se hace nada con el contador.
-                } else {
-                    // Si el otro usuario no ha participado en 24h, la racha se rompe y reinicia.
-                    streakData.count = 1;
-                    streakData.lastInteraction = today;
-                    // Se reinicia la participación del otro usuario para que la racha pueda continuar desde 1.
-                    delete streakData.participants[user2];
-                }
+                // El otro usuario no ha participado en 24h. La racha se rompe y se reinicia a 1.
+                currentStreakData.count = 1;
+                currentStreakData.lastInteraction = todayTimestamp;
+                // Se borra la participación del otro usuario para que la racha no continúe hasta que vuelva a participar.
+                delete currentStreakData.participants[user2];
             }
         }
 
         // Guardar los datos actualizados en Firebase
-        await set(streakDataRef, streakData);
+        await set(streakDataRef, currentStreakData);
 
     } catch (error) {
         console.error("Error al actualizar la racha:", error);
@@ -1261,6 +1320,14 @@ function createMessageElement(messageId, message) {
         messageContentDiv.appendChild(senderName);
     }
     
+    // --- NUEVO: Indicador de Mensaje Reenviado ---
+    if (message.forwardedFrom) {
+        const forwardedIndicator = document.createElement('div');
+        forwardedIndicator.className = 'forwarded-indicator';
+        forwardedIndicator.innerHTML = `<i class="fas fa-share"></i> Mensaje reenviado`;
+        messageContentDiv.appendChild(forwardedIndicator);
+    }
+
     if (message.replyTo) {
         const quoteDiv = document.createElement('div');
         quoteDiv.className = 'reply-original'; 
@@ -1285,6 +1352,7 @@ function createMessageElement(messageId, message) {
         textP.style.fontStyle = 'italic';
     } else {
         textP.textContent = message.text;
+        // textP.style.color = 'var(--dynamic-text-color)'; // **NUEVO: Aplicar color de texto dinámico**
     }
     // ******** FIN DE MODIFICACIÓN ********
     
@@ -1294,12 +1362,22 @@ function createMessageElement(messageId, message) {
     timestampSpan.className = 'message-time';
     
     let checkIconHtml = '';
+    let editedIndicator = ''; // NUEVO
+
     if (isSentByCurrentUser) {
         const readClass = message.read ? ' read' : ''; 
         checkIconHtml = `<i class="fas fa-check-double checkmark${readClass}"></i>`;
     }
     
-    timestampSpan.innerHTML = formatTimestamp(message.timestamp) + (isSentByCurrentUser ? ` ${checkIconHtml}` : ''); 
+    // --- NUEVO: Indicador de Mensaje Editado ---
+    if (message.editedAt) {
+        // Usamos un estilo sutil para el indicador de editado
+        editedIndicator = `<span style="font-size: 10px; opacity: 0.7; margin-left: 5px;">(editado)</span>`;
+    }
+    // --- FIN NUEVO ---
+
+    // Modificado para incluir el indicador de editado
+    timestampSpan.innerHTML = formatTimestamp(message.timestamp) + (isSentByCurrentUser ? ` ${checkIconHtml}` : '') + editedIndicator;
     messageContentDiv.appendChild(timestampSpan);
     
     messageContainer.appendChild(messageContentDiv);
@@ -1370,6 +1448,38 @@ function createMessageActions(messageId, message) {
     if (isSearchActive) replyButton.disabled = true; // Deshabilitar si la búsqueda está activa
     actionsDiv.appendChild(replyButton);
     
+    // --- NUEVO: Botón de Reenviar ---
+    const forwardButton = document.createElement('button');
+    forwardButton.innerHTML = '<i class="fas fa-share"></i>';
+    forwardButton.title = 'Reenviar';
+    forwardButton.className = 'action-button forward-button'; // Clase para identificarlo
+    forwardButton.onclick = (e) => {
+        e.stopPropagation();
+        openForwardModal(messageId, message);
+        closeAllMessageActions();
+    };
+    if (isSearchActive) {
+        forwardButton.disabled = true;
+    }
+    actionsDiv.appendChild(forwardButton);
+    // --- FIN NUEVO ---
+
+    // --- NUEVO: Botón de Editar (Re-añadido) ---
+    if (isSentByCurrentUser) {
+        const editButton = document.createElement('button');
+        editButton.innerHTML = '<i class="fas fa-pencil-alt"></i>';
+        editButton.title = 'Editar';
+        editButton.className = 'action-button edit-button';
+        editButton.onclick = (e) => {
+            e.stopPropagation();
+            openEditModal(messageId, message);
+            closeAllMessageActions();
+        };
+        if (isSearchActive) editButton.disabled = true;
+        actionsDiv.appendChild(editButton);
+    }
+    // --- FIN NUEVO ---
+
     if (isSentByCurrentUser) {
         const deleteButton = document.createElement('button');
         deleteButton.innerHTML = '<i class="fas fa-trash-alt"></i>'; 
@@ -1458,6 +1568,186 @@ function toggleReaction(messageId, emoji) {
             remove(reactionRef); 
         } else {
             set(reactionRef, emoji); 
+        }
+    });
+}
+
+// ==========================================================
+// --- 11.5 LÓGICA PARA EDITAR MENSAJES (NUEVO) ---
+// ==========================================================
+
+/**
+ * Abre el modal para editar un mensaje.
+ * @param {string} messageId - El ID del mensaje a editar.
+ * @param {object} message - El objeto del mensaje.
+ */
+function openEditModal(messageId, message) {
+    messageToEditId = messageId;
+    editMessageInput.value = message.text; // Cargar el texto actual en el textarea
+    editModal.classList.add('show');
+    editMessageInput.focus();
+}
+
+/**
+ * Cierra el modal de edición.
+ */
+function closeEditModal() {
+    editModal.classList.remove('show');
+    messageToEditId = null;
+    editMessageInput.value = '';
+}
+
+/**
+ * Guarda los cambios del mensaje editado en Firebase.
+ */
+async function handleSaveEdit() {
+    const newText = editMessageInput.value.trim();
+
+    if (!messageToEditId || newText === '') {
+        alert("El mensaje no puede estar vacío.");
+        return;
+    }
+
+    const messageRef = ref(database, `messages/${messageToEditId}`);
+
+    try {
+        // Actualizamos el texto y añadimos una marca de tiempo de edición
+        await update(messageRef, {
+            text: newText,
+            editedAt: serverTimestamp()
+        });
+        console.log(`Mensaje ${messageToEditId} editado.`);
+        closeEditModal();
+    } catch (error) {
+        console.error("Error al editar el mensaje:", error);
+        alert("Hubo un error al guardar los cambios.");
+    }
+}
+
+// --- Event Listeners para el modal de edición ---
+if (editModal) {
+    closeEditModalButton.addEventListener('click', closeEditModal);
+    cancelEditButton.addEventListener('click', closeEditModal);
+    saveEditButton.addEventListener('click', handleSaveEdit);
+    editModal.addEventListener('click', (e) => { if (e.target === editModal) closeEditModal(); });
+}
+
+// ==========================================================
+// --- 11. LÓGICA PARA REENVIAR MENSAJES (NUEVO) ---
+// ==========================================================
+
+/**
+ * Abre el modal para seleccionar un contacto a quien reenviar el mensaje.
+ * @param {string} messageId - El ID del mensaje a reenviar.
+ * @param {object} message - El objeto del mensaje a reenviar.
+ */
+function openForwardModal(messageId, message) {
+    messageToForward = message;
+    forwardRecipient = null; // Limpiar selección anterior
+    sendForwardButton.disabled = true; // Deshabilitar botón de envío
+    forwardSearchInput.value = ''; // Limpiar búsqueda
+
+    renderForwardContactsList(); // Renderizar la lista de contactos
+    forwardModal.classList.add('show');
+}
+
+/**
+ * Cierra el modal de reenvío.
+ */
+function closeForwardModal() {
+    forwardModal.classList.remove('show');
+    messageToForward = null;
+    forwardRecipient = null;
+}
+
+/**
+ * Renderiza la lista de contactos en el modal de reenvío, opcionalmente filtrada.
+ * @param {string} [searchTerm=''] - Término de búsqueda para filtrar contactos.
+ */
+function renderForwardContactsList(searchTerm = '') {
+    forwardContactsList.innerHTML = '';
+    const lowerCaseSearchTerm = searchTerm.toLowerCase();
+
+    const contacts = Object.keys(CONTACTS_MAP)
+        .filter(username => username.toLowerCase().includes(lowerCaseSearchTerm));
+
+    if (contacts.length === 0) {
+        forwardContactsList.innerHTML = '<p style="text-align: center; color: var(--text-secondary);">No se encontraron contactos.</p>';
+        return;
+    }
+
+    contacts.forEach(username => {
+        const item = document.createElement('div');
+        item.className = 'conversation-item'; // Reutilizamos el estilo
+        item.dataset.username = username;
+        item.innerHTML = `
+            <div class="contact-avatar">${username.charAt(0).toUpperCase()}</div>
+            <div class="chat-details">
+                <span class="chat-name">${username}</span>
+            </div>
+        `;
+        item.addEventListener('click', () => {
+            // Desmarcar el anterior seleccionado
+            const currentSelected = forwardContactsList.querySelector('.active');
+            if (currentSelected) {
+                currentSelected.classList.remove('active');
+            }
+            // Marcar el nuevo
+            item.classList.add('active');
+            forwardRecipient = username;
+            sendForwardButton.disabled = false; // Habilitar el botón de envío
+        });
+        forwardContactsList.appendChild(item);
+    });
+}
+
+/**
+ * Envía el mensaje reenviado al destinatario seleccionado.
+ */
+function handleForwardSend() {
+    if (!messageToForward || !forwardRecipient) {
+        alert("Error: No se ha seleccionado un mensaje o un destinatario.");
+        return;
+    }
+
+    const forwardedMessage = {
+        sender: currentUser,
+        receiver: forwardRecipient,
+        text: messageToForward.text, // El texto original
+        timestamp: serverTimestamp(),
+        read: false,
+        reactions: {},
+        // Añadimos una marca para saber que es reenviado y de quién
+        forwardedFrom: messageToForward.sender 
+    };
+
+    push(messagesRef, forwardedMessage)
+        .then(() => {
+            console.log(`Mensaje reenviado a ${forwardRecipient}`);
+            closeForwardModal();
+            // Opcional: Mostrar una confirmación visual
+            alert(`Mensaje reenviado a ${forwardRecipient}`);
+        })
+        .catch(error => {
+            console.error("Error al reenviar el mensaje:", error);
+            alert("Hubo un error al reenviar el mensaje.");
+        });
+}
+
+// --- Event Listeners para el modal de reenvío ---
+if (forwardModal) {
+    closeForwardModalButton.addEventListener('click', closeForwardModal);
+    cancelForwardButton.addEventListener('click', closeForwardModal);
+    sendForwardButton.addEventListener('click', handleForwardSend);
+
+    forwardSearchInput.addEventListener('input', (e) => {
+        renderForwardContactsList(e.target.value);
+    });
+
+    // Cerrar si se hace clic en el fondo
+    forwardModal.addEventListener('click', (event) => {
+        if (event.target === forwardModal) {
+            closeForwardModal();
         }
     });
 }
@@ -1872,6 +2162,9 @@ function highlightTextInNode(node, searchTerm) {
 // INICIALIZACIÓN
 document.addEventListener('DOMContentLoaded', () => {
     // --- Event Listeners para Búsqueda (Corregido) ---
+    const statsButton = document.getElementById('chat-stats-button');
+    if (statsButton) statsButton.addEventListener('click', openStatsModal);
+
     if (searchInChatButton) searchInChatButton.addEventListener('click', openSearch);
     if (closeSearchButton) closeSearchButton.addEventListener('click', closeSearch);
     if (searchInput) searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); executeSearch(); } });
@@ -1972,7 +2265,6 @@ const closeStatsModal = () => {
 };
 
 // --- Event Listeners para el modal ---
-if (statsButton) statsButton.addEventListener('click', openStatsModal);
 if (closeModalButton) closeModalButton.addEventListener('click', closeStatsModal);
 
 // Cierra el modal si se hace clic en el overlay (fondo oscuro)

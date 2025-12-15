@@ -281,10 +281,14 @@ saveUserChangesBtn.addEventListener('click', async () => {
                 
                 // Iterar sobre cada mensaje y buscar el username antiguo
                 for (const messageId in messages) {
-                    const message = messages[messageId];
-                    if (message.username === editingUsername) {
-                        // Crear el path de actualización para ese mensaje
-                        updates[`messages/${messageId}/username`] = newUsername;
+                    const message = messages[messageId];                    
+                    // Si el usuario que se está editando es el emisor (sender)
+                    if (message.sender === editingUsername) {
+                        updates[`messages/${messageId}/sender`] = newUsername;
+                    }
+                    // Si el usuario que se está editando es el receptor (receiver)
+                    if (message.receiver === editingUsername) {
+                        updates[`messages/${messageId}/receiver`] = newUsername;
                     }
                 }
 
@@ -298,7 +302,7 @@ saveUserChangesBtn.addEventListener('click', async () => {
             // Actualizar la variable de edición
             editingUsername = newUsername;
 
-            setStatus(modalStatus, `Usuario y contraseña cambiados para "${newUsername}". (Mensajes actualizados)`, 'success');
+            setStatus(modalStatus, `Usuario cambiado a "${newUsername}". ¡Mensajes actualizados!`, 'success');
 
         } else if (newPassword) {
             // Solo cambio de contraseña (o el nombre de usuario es el mismo)
