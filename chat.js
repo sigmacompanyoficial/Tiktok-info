@@ -1692,6 +1692,7 @@ function createPeerConnection(callId) {
  */
 async function startCall() {
     if (!activeChatUser) {
+        // **NUEVO: Usar un toast o una alerta más amigable**
         alert("Selecciona un chat para llamar.");
         return;
     }
@@ -1704,6 +1705,9 @@ async function startCall() {
 
     startCallButton.style.display = 'none';
     hangupButton.style.display = 'flex';
+
+    // **NUEVO: Temporizador de 30 segundos para cancelar si no hay respuesta**
+    let callTimeout;
 
     // Crear un nuevo ID único para la llamada en Realtime Database
     const newCallRef = push(callsRef);
@@ -1726,9 +1730,23 @@ async function startCall() {
     onValue(newCallRef, (snapshot) => {
         const data = snapshot.val();
         if (data && data.answer && peerConnection && !peerConnection.currentRemoteDescription) {
+            // **NUEVO: Si se recibe una respuesta, se cancela el temporizador de timeout**
+            if (callTimeout) clearTimeout(callTimeout);
+
             const answerDescription = new RTCSessionDescription(data.answer);
             peerConnection.setRemoteDescription(answerDescription);
         }
+    });
+
+    // **NUEVO: Iniciar el temporizador de 30 segundos**
+    callTimeout = setTimeout(() => {
+        // Comprobar si la llamada sigue activa y no ha sido contestada
+        get(newCallRef).then((snapshot) => {
+            if (snapshot.exists() && !snapshot.val().answer) {
+                alert(`${activeChatUser} no ha contestado.`);
+                hangupCall(); // Colgar si no hay respuesta
+            }
+        });
     });
 
     // Escuchar los candidatos ICE del otro usuario
