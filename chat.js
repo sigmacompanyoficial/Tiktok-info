@@ -91,11 +91,11 @@ const conversationsContainer = document.getElementById('conversations-container'
 const chatRoomPanel = document.getElementById('chat-room-panel');
 const chatHeader = document.querySelector('.chat-header');
 const currentChatName = document.getElementById('current-chat-name');
-const initialStateContainer = document.getElementById('initial-state-container'); // **NUEVO**
 const usernameDisplay = document.getElementById('username-display');
 const contactStatusText = document.getElementById('contact-status-text'); 
 const chatContactAvatar = document.getElementById('chat-contact-avatar'); 
 const headerStreakIndicator = document.getElementById('header-streak-indicator'); // **NUEVO: Indicador de racha en cabecera**
+const contactLocalTime = document.getElementById('contact-local-time'); // **NUEVO: Para la hora local**
 
 // --- ELEMENTOS DE BÚSQUEDA EN CHAT (NUEVO) ---
 const searchInChatButton = document.getElementById('search-in-chat-button');
@@ -119,15 +119,10 @@ const remoteVideo = document.getElementById('remote-video');
 const videoCallModal = document.getElementById('video-call-modal');
 const startCallButton = document.getElementById('start-call-button');
 const hangupButton = document.getElementById('hangup-button');
+const preCallOverlay = document.getElementById('pre-call-overlay');
 const toggleAudioButton = document.getElementById('toggle-audio-button');
 const toggleVideoButton = document.getElementById('toggle-video-button');
 const userSearchInput = document.getElementById('user-search-input'); // **NUEVO: Referencia al input de búsqueda**
-// --- NUEVOS ELEMENTOS DE VIDEOLLAMADA ---
-const inCallControls = document.getElementById('in-call-controls');
-const shareScreenButton = document.getElementById('share-screen-button');
-const switchCameraButton = document.getElementById('switch-camera-button');
-const callContactName = document.getElementById('call-contact-name');
-const callStatusText = document.getElementById('call-status-text');
 // --- NUEVO: ELEMENTOS DEL BANNER DE LLAMADA ENTRANTE ---
 const incomingCallBanner = document.getElementById('incoming-call-banner');
 const bannerCallerName = document.getElementById('banner-caller-name');
@@ -156,6 +151,7 @@ let CHAT_DURATIONS = {}; // **NUEVO: Almacena las duraciones de los chats**
 let chatEnterTime = null; // **NUEVO: Timestamp de cuándo se entró al chat actual**
 let STREAKS_DATA = {}; // **NUEVA VARIABLE: Para almacenar datos de rachas**
 let timeUpdateInterval = null; // **NUEVA VARIABLE: Intervalo para actualizar el estado de conexión**
+let localTimeInterval = null; // **NUEVO: Intervalo para la hora local del contacto**
 
 // --- 3. CONFIGURACIÓN Y VARIABLES DE WEBRTC ---
 const iceServersConfiguration = {
@@ -171,9 +167,6 @@ const iceServersConfiguration = {
 let peerConnection;
 let localStream;
 let currentCallId = null;
-let callTimeout = null; // **NUEVO: Temporizador para llamadas no contestadas**
-let isCallActive = false; // **NUEVO: Bandera para saber si una llamada está conectada**
-let controlsTimeout; // Para ocultar los controles de llamada
 
 // NUEVAS VARIABLES PARA PAGINACIÓN Y OPTIMIZACIÓN
 const MESSAGES_PER_PAGE = 15; // Lote de 15 mensajes
@@ -647,11 +640,6 @@ function setActiveChat(username) {
     // **FIN NUEVO**
 
     // 1. Limpieza de intervalos y estado anterior
-    if (initialStateContainer) initialStateContainer.style.display = 'none'; // Ocultar bienvenida
-    if (chatRoomPanel) {
-        chatRoomPanel.style.display = 'flex'; // Mostrar panel de chat
-        chatRoomPanel.classList.add('has-active-chat');
-    }
     for (const id in seenIntervals) {
         clearInterval(seenIntervals[id]);
     }
@@ -661,7 +649,11 @@ function setActiveChat(username) {
         clearInterval(timeUpdateInterval);
         timeUpdateInterval = null;
     }
-
+    if (localTimeInterval) { // **NUEVO: Limpiar intervalo de hora local**
+        clearInterval(localTimeInterval);
+        localTimeInterval = null;
+        if (contactLocalTime) contactLocalTime.style.display = 'none';
+    }
 
     // **NUEVO: Iniciar el cronómetro para el nuevo chat**
     chatEnterTime = Date.now();
@@ -716,7 +708,9 @@ function setActiveChat(username) {
     startContactStatusInterval(); // **CORRECCIÓN: Iniciar el intervalo de actualización de estado**
     updateHeaderStreak(); // **NUEVO: Actualizar la racha en la cabecera al cambiar de chat**
 
-
+    // **NUEVO: Iniciar el reloj de hora local si corresponde**
+    startLocalTimeClock();
+    
     // 5. APLAZAR MARCAJE COMO LEÍDO (Mantener la lógica de estabilidad)
     setTimeout(() => {
         let updates = {};
@@ -747,6 +741,43 @@ function setActiveChat(username) {
     clearTimeout(typingTimeout);
     isTypingActive = false; 
     typingTimeout = null;
+}
+
+/**
+ * **NUEVO: Inicia un reloj en tiempo real si el chat es entre 'aynara' y 'dylan'.**
+ */
+function startLocalTimeClock() {
+    if (!contactLocalTime) return;
+
+    const isAynaraChattingWithDylan = caseInsensitiveEquals(currentUser, 'aynara') && caseInsensitiveEquals(activeChatUser, 'dylan');
+    const isDylanChattingWithAynara = caseInsensitiveEquals(currentUser, 'dylan') && caseInsensitiveEquals(activeChatUser, 'aynara');
+
+    if (isAynaraChattingWithDylan || isDylanChattingWithAynara) {
+        const timeZone = isAynaraChattingWithDylan ? 'Indian/Mauritius' : 'Europe/Madrid';
+        const countryName = isAynaraChattingWithDylan ? 'Mauricio' : 'España';
+        
+        const updateTime = () => {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('es-ES', { // Formato HH:MM:SS
+                timeZone: timeZone,
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit'
+            });
+            contactLocalTime.innerHTML = `<span class="time-prefix"> </span>${countryName}: ${timeString}`;
+        };
+
+        // Mostrar el elemento y ejecutar la primera actualización
+        contactLocalTime.style.display = 'block';
+        updateTime();
+
+        // Iniciar el intervalo para actualizar cada segundo
+        localTimeInterval = setInterval(updateTime, 1000);
+
+    } else {
+        // Si no es el chat específico, ocultar el reloj
+        contactLocalTime.style.display = 'none';
+    }
 }
 
 
@@ -1617,15 +1648,13 @@ function toggleReaction(messageId, emoji) {
 async function openLocalStream() {
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
-        if (localVideo) localVideo.srcObject = localStream;
-        if (callStatusText) callStatusText.textContent = `Listo para llamar a ${activeChatUser}...`;
-        // CAMBIO: Actualizar la UI de los botones de media tan pronto como el stream esté listo
-        updateMediaButtonUI(); 
+        localVideo.srcObject = localStream;
+        preCallOverlay.style.display = 'none'; // Oculta el overlay de "previsualización"
+        updateMediaButtonUI();
     } catch (error) {
         console.error("Error al acceder a la cámara/micrófono:", error);
-        if (callStatusText) callStatusText.textContent = "Error de cámara/micrófono";
-        if (callStatusText) callStatusText.style.color = '#e74c3c';
-        // Considerar cerrar el modal o mostrar un error más persistente
+        preCallOverlay.innerHTML = `<p style="color: #e74c3c;">Error al acceder a la cámara/micrófono. Revisa los permisos.</p>`;
+        preCallOverlay.style.display = 'flex';
     }
 }
 
@@ -1674,10 +1703,7 @@ async function startCall() {
     }
 
     startCallButton.style.display = 'none';
-    // CAMBIO: Mostrar solo los controles que son para "durante la llamada"
-    if (inCallControls) inCallControls.style.display = 'flex';
-    videoCallModal.classList.remove('pre-call');
-    callStatusText.textContent = "Conectando...";
+    hangupButton.style.display = 'flex';
 
     // Crear un nuevo ID único para la llamada en Realtime Database
     const newCallRef = push(callsRef);
@@ -1697,26 +1723,11 @@ async function startCall() {
     await set(newCallRef, { offer, callerId: currentUser, calleeId: activeChatUser });
 
     // Escuchar la respuesta del otro usuario
-    // **NUEVO: Usar onValue para manejar también el rechazo o la eliminación de la llamada**
     onValue(newCallRef, (snapshot) => {
         const data = snapshot.val();
         if (data && data.answer && peerConnection && !peerConnection.currentRemoteDescription) {
             const answerDescription = new RTCSessionDescription(data.answer);
-            callStatusText.textContent = "Conectado";
             peerConnection.setRemoteDescription(answerDescription);
-        }
-        // **NUEVO: Manejar si el destinatario rechaza la llamada**
-        if (data && data.status === 'rejected' && !isCallActive) {
-            alert(`${activeChatUser} ha rechazado la llamada.`);
-            hangupCall();
-        }
-    }, { onlyOnce: false }); // `onlyOnce: false` es el comportamiento por defecto, pero lo hacemos explícito
-
-    // **NUEVO: Iniciar temporizador de 2 minutos para llamada no contestada**
-    callTimeout = setTimeout(() => {
-        if (!isCallActive) { // Si la llamada no ha sido conectada
-            alert(`${activeChatUser} no ha contestado.`);
-            hangupCall(); // Cuelga la llamada
         }
     });
 
@@ -1743,16 +1754,12 @@ async function startCall() {
  */
 async function answerCall(callId, offer) {
     currentCallId = callId;
-    videoCallModal.classList.add('show');
-    videoCallModal.classList.remove('pre-call');
+    videoCallModal.style.display = 'flex';
     await openLocalStream();
 
     startCallButton.style.display = 'none';
-    // CAMBIO: Mostrar solo los controles que son para "durante la llamada"
-    if (inCallControls) inCallControls.style.display = 'flex';
-    callStatusText.textContent = "Conectado";
+    hangupButton.style.display = 'flex';
 
-    isCallActive = true; // **NUEVO: Marcar la llamada como activa**
     createPeerConnection(callId);
 
     await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
@@ -1787,11 +1794,6 @@ async function answerCall(callId, offer) {
  * Cuelga la llamada, limpia los recursos y el estado.
  */
 async function hangupCall() {
-    // **NUEVO: Limpiar el temporizador de llamada no contestada**
-    if (callTimeout) {
-        clearTimeout(callTimeout);
-        callTimeout = null;
-    }
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
         localStream = null;
@@ -1804,27 +1806,20 @@ async function hangupCall() {
 
     if (currentCallId) {
         const callNodeRef = ref(database, `calls/${currentCallId}`);
-        // **MODIFICADO: Solo eliminar si el nodo todavía existe**
-        const snapshot = await get(callNodeRef);
-        if (snapshot.exists()) await remove(callNodeRef);
-        currentCallId = null;
+        await remove(callNodeRef);
     }
 
     // Resetear UI
-    videoCallModal.classList.remove('show');
-    videoCallModal.classList.add('pre-call'); // Restablecer al estado pre-llamada
+    videoCallModal.style.display = 'none';
     localVideo.srcObject = null;
     remoteVideo.srcObject = null;
     startCallButton.style.display = 'flex';
-    // CAMBIO: Ocultar solo los controles de "durante la llamada"
-    if (inCallControls) inCallControls.style.display = 'none';
-    callStatusText.textContent = "Iniciando cámara...";
-    callStatusText.style.color = 'white';
-    isCallActive = false; // **NUEVO: Resetear el estado de la llamada**
-    if (controlsTimeout) clearTimeout(controlsTimeout);
+    hangupButton.style.display = 'none';
+    preCallOverlay.style.display = 'flex';
+    preCallOverlay.innerHTML = `<p>Iniciando cámara...</p>`;
+    currentCallId = null;
 
-    // **NUEVO: Reproducir sonido de colgar**
-    if (hangupSound) hangupSound.play().catch(e => console.warn("No se pudo reproducir el sonido de colgar."));
+    // hangupSound.play(); // Comentado porque el archivo no existe
     console.log("Llamada finalizada.");
 }
 
@@ -1837,7 +1832,7 @@ async function hangupCall() {
 function showIncomingCallBanner(callerId, callId, offer) {
     if (bannerCallerName) bannerCallerName.textContent = callerId;
     if (incomingCallBanner) incomingCallBanner.classList.add('show');
-    if (ringtoneSound) ringtoneSound.play().catch(e => console.warn("No se pudo reproducir el tono de llamada. El usuario debe interactuar con la página primero."));
+    if (ringtoneSound) ringtoneSound.play().catch(e => console.warn("No se pudo reproducir el tono de llamada."));
 
     // Configurar el botón de aceptar
     if (bannerAcceptButton) bannerAcceptButton.onclick = async () => {
@@ -1872,20 +1867,10 @@ function listenForIncomingCalls() {
         const callData = snapshot.val();
         const callId = snapshot.key;
 
-        // **NUEVO: Comprobar si la llamada es reciente (ej. menos de 2 minutos)**
-        const CALL_TIMEOUT_MS = 2 * 60 * 1000;
-        if (callData.timestamp && (Date.now() - callData.timestamp > CALL_TIMEOUT_MS)) {
-            // Si la llamada es antigua, la ignoramos y la borramos para limpiar.
-            remove(ref(database, `calls/${callId}`));
-            return;
-        }
-
         // Si la llamada es para mí y aún no tiene respuesta
         if (callData && caseInsensitiveEquals(callData.calleeId, currentUser) && !callData.answer) {
             showIncomingCallBanner(callData.callerId, callId, callData.offer);
         }
-        // **NUEVO: Configurar el colgado automático si el que llama se desconecta**
-        onDisconnect(ref(database, `calls/${callId}`)).remove();
     });
 
     // Escuchar cuando una llamada se elimina (alguien colgó)
@@ -1893,10 +1878,7 @@ function listenForIncomingCalls() {
         const callId = snapshot.key;
         if (callId === currentCallId) {
             alert("La otra persona ha colgado.");
-            // **MODIFICADO: No llamar a hangupCall() aquí para evitar doble borrado.**
-            // La limpieza de la UI ya se hace en hangupCall, que es llamado por el que cuelga.
-            // Solo necesitamos resetear la UI localmente.
-            resetCallUI();
+            hangupCall();
         }
         closeIncomingCallBanner(); // Cierra el banner si el que llama cancela
     });
@@ -1915,27 +1897,6 @@ function listenForIncomingCalls() {
 }
 
 /**
- * **NUEVO: Resetea la UI de la llamada sin afectar la base de datos.**
- * Útil cuando la llamada es colgada por el otro usuario.
- */
-function resetCallUI() {
-    if (localStream) {
-        localStream.getTracks().forEach(track => track.stop());
-        localStream = null;
-    }
-    if (peerConnection) {
-        peerConnection.close();
-        peerConnection = null;
-    }
-    videoCallModal.classList.remove('show');
-    videoCallModal.classList.add('pre-call');
-    localVideo.srcObject = null;
-    remoteVideo.srcObject = null;
-    startCallButton.style.display = 'flex';
-    if (inCallControls) inCallControls.style.display = 'none';
-}
-
-/**
  * Actualiza la UI de los botones de audio/video.
  */
 function updateMediaButtonUI() {
@@ -1946,8 +1907,8 @@ function updateMediaButtonUI() {
     toggleAudioButton.innerHTML = audioEnabled ? '<i class="fas fa-microphone"></i>' : '<i class="fas fa-microphone-slash"></i>';
     toggleVideoButton.innerHTML = videoEnabled ? '<i class="fas fa-video"></i>' : '<i class="fas fa-video-slash"></i>';
 
-    toggleAudioButton.classList.toggle('toggled-off', !audioEnabled);
-    toggleVideoButton.classList.toggle('toggled-off', !videoEnabled);
+    toggleAudioButton.classList.toggle('active', !audioEnabled);
+    toggleVideoButton.classList.toggle('active', !videoEnabled);
 }
 
 // ==========================================================
@@ -2545,15 +2506,6 @@ function highlightTextInNode(node, searchTerm) {
 
 // INICIALIZACIÓN
 document.addEventListener('DOMContentLoaded', () => {
-    // --- NUEVO: Crear botones de acción ocultos para que el script pueda hacerles 'click' ---
-    const hiddenActions = document.createElement('div');
-    hiddenActions.style.display = 'none';
-    hiddenActions.innerHTML = `
-        <button id="search-in-chat-button"></button>
-        <button id="chat-stats-button"></button>
-        <button id="delete-chat-messages-button"></button>
-    `;
-    document.body.appendChild(hiddenActions);
     // --- Event Listeners para Búsqueda (Corregido) ---
     const statsButton = document.getElementById('chat-stats-button');
     if (statsButton) statsButton.addEventListener('click', openStatsModal);
@@ -2590,28 +2542,13 @@ document.addEventListener('DOMContentLoaded', () => {
             alert("Por favor, selecciona un chat para iniciar una videollamada.");
             return;
         }
-        // Preparar UI de la llamada
-        callContactName.textContent = activeChatUser;
-        callStatusText.textContent = "Iniciando cámara...";
-        callStatusText.style.color = 'white'; // Resetear color de error
-        videoCallModal.classList.add('show', 'pre-call');
-
+        videoCallModal.style.display = 'flex';
         await openLocalStream();
-        // El texto de "Listo para llamar" se pone dentro de openLocalStream
     });
 
     startCallButton.addEventListener('click', startCall);
-
-    // El botón de colgar ahora cierra el modal si la llamada no ha empezado, o cuelga si ya empezó.
     hangupButton.addEventListener('click', () => {
-        // Si currentCallId es null, significa que la llamada no se ha establecido.
-        // En este caso, simplemente cerramos el modal sin afectar la base de datos.
-        if (!currentCallId) {
-            // **NUEVO: Asegurarse de que el stream local se detenga si cancelamos antes de llamar**
-            videoCallModal.classList.remove('show');
-            if (localStream) localStream.getTracks().forEach(track => track.stop());
-        }
-        hangupCall(); // hangupCall se encarga de limpiar todo, incluido el stream.
+        hangupCall();
     });
 
     toggleAudioButton.addEventListener('click', () => {
@@ -2632,18 +2569,6 @@ document.addEventListener('DOMContentLoaded', () => {
                 updateMediaButtonUI();
             }
         }
-    });
-
-    // Ocultar/mostrar controles de llamada
-    videoCallModal.addEventListener('mousemove', () => {
-        if (controlsTimeout) clearTimeout(controlsTimeout);
-        videoCallModal.classList.remove('hide-controls');
-        controlsTimeout = setTimeout(() => {
-            // No ocultar si estamos en la fase pre-llamada
-            if (!videoCallModal.classList.contains('pre-call')) {
-                videoCallModal.classList.add('hide-controls');
-            }
-        }, 3000);
     });
 
     renderConversationsList();
