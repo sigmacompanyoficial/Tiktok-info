@@ -38,6 +38,38 @@ const usersRef = ref(database, 'users');
 const streaksRef = ref(database, 'streaks'); // **NUEVA REFERENCIA: Para las rachas**
 const chatDurationsRef = ref(database, 'chatDurations'); // **NUEVO: Para duración de chats**
 
+// ==========================================================
+// --- NUEVO: LÓGICA DE CIFRADO ---
+// ==========================================================
+// ¡ADVERTENCIA! Esta clave es solo para demostración. En una aplicación real,
+// la clave debe ser única por chat y gestionada de forma segura (p.ej. usando Diffie-Hellman).
+const ENCRYPTION_KEY = 'Aynara-Dylan ';
+
+/**
+ * Cifra un mensaje de texto usando AES.
+ * @param {string} text - El texto a cifrar.
+ * @returns {string} El texto cifrado en formato Base64.
+ */
+function encryptMessage(text) {
+    if (!text) return text;
+    try {
+        return CryptoJS.AES.encrypt(text, ENCRYPTION_KEY).toString();
+    } catch (e) {
+        console.error("Error al cifrar:", e);
+        return text; // Devuelve el texto original si falla
+    }
+}
+
+/**
+ * Descifra un mensaje de texto cifrado con AES.
+ * @param {string} ciphertext - El texto cifrado.
+ * @returns {string} El texto original descifrado.
+ */
+function decryptMessage(ciphertext) {
+    if (!ciphertext) return ciphertext;
+    const bytes = CryptoJS.AES.decrypt(ciphertext, ENCRYPTION_KEY);
+    return bytes.toString(CryptoJS.enc.Utf8) || ciphertext; // Si no se puede descifrar, devuelve el original
+}
 
 // --- 2. REFERENCIAS A ELEMENTOS DEL DOM ---
 const messageForm = document.getElementById('message-form');
@@ -163,7 +195,10 @@ function showNotification(senderName, messageText, username) {
 
     // 2. Rellenar el contenido
     toastSenderName.textContent = senderName;
-    toastMessageContent.textContent = messageText;
+    // NUEVO: Descifrar el mensaje para la notificación
+    const decryptedText = decryptMessage(messageText);
+    toastMessageContent.textContent = decryptedText;
+
     if (toastAvatarInitial) toastAvatarInitial.textContent = senderName.charAt(0).toUpperCase();
 
     // 3. Mostrar la notificación con transición
@@ -987,16 +1022,15 @@ if (messageForm && messageInput) {
             return;
         }
 
-        // ******** Envío de texto plano ********
         const newMessage = {
             sender: currentUser,
             receiver: activeChatUser, 
-            text: messageText, // <-- Texto plano (no cifrado)
+            text: encryptMessage(messageText), // <-- Texto cifrado
+            encrypted: true, // <-- Bandera para indicar que está cifrado
             timestamp: serverTimestamp(),
             read: false, 
             reactions: {},
         };
-        // ******** FIN DE MODIFICACIÓN ********
 
         if (replyTo) newMessage.replyTo = replyTo;
 
@@ -1344,17 +1378,13 @@ function createMessageElement(messageId, message) {
     const textP = document.createElement('p');
     textP.className = 'message-text';
     
-    // ******** Manejo de mensajes cifrados antiguos ********
-    if (message.encrypted) {
-        // Muestra una advertencia si el mensaje fue cifrado antes de la modificación
-        textP.textContent = `[MENSAJE CIFRADO - No se puede decodificar]`;
-        textP.style.color = '#e74c3c'; // Rojo para destacar
-        textP.style.fontStyle = 'italic';
+    // ******** MODIFICADO: Descifrar el mensaje antes de mostrarlo ********
+    if (message.encrypted && message.text) {
+        textP.textContent = decryptMessage(message.text);
     } else {
-        textP.textContent = message.text;
-        // textP.style.color = 'var(--dynamic-text-color)'; // **NUEVO: Aplicar color de texto dinámico**
+        // Mantiene la compatibilidad con mensajes antiguos no cifrados
+        textP.textContent = message.text || '';
     }
-    // ******** FIN DE MODIFICACIÓN ********
     
     messageContentDiv.appendChild(textP);
 
@@ -1429,17 +1459,14 @@ function createMessageActions(messageId, message) {
         const replyUser = document.getElementById('reply-user');
         const replyText = document.getElementById('reply-text');
         
-        // ******** Manejo de texto de respuesta cifrado ********
-        let replyContent = message.text;
-        if (message.encrypted) {
-             replyContent = `[MENSAJE CIFRADO]`;
-        }
-        // ******** FIN DE MODIFICACIÓN ********
+        // ******** MODIFICADO: Descifrar texto para la vista previa de respuesta ********
+        const replyContent = message.encrypted 
+            ? decryptMessage(message.text) 
+            : message.text;
         
         if (replyUser && replyText && replyPreview) {
             replyUser.textContent = message.sender;
-            // Corregido: usar replyContent
-            replyText.textContent = replyContent.length > 50 ? replyContent.substring(0, 50) + '...' : replyContent; 
+            replyText.textContent = replyContent.length > 50 ? replyContent.substring(0, 50) + '...' : replyContent;
             replyPreview.style.display = 'flex';
         }
         if (messageInput) messageInput.focus();
@@ -1583,7 +1610,11 @@ function toggleReaction(messageId, emoji) {
  */
 function openEditModal(messageId, message) {
     messageToEditId = messageId;
-    editMessageInput.value = message.text; // Cargar el texto actual en el textarea
+    // NUEVO: Descifrar el texto antes de ponerlo en el editor
+    const currentText = message.encrypted 
+        ? decryptMessage(message.text) 
+        : message.text;
+    editMessageInput.value = currentText;
     editModal.classList.add('show');
     editMessageInput.focus();
 }
@@ -1613,7 +1644,8 @@ async function handleSaveEdit() {
     try {
         // Actualizamos el texto y añadimos una marca de tiempo de edición
         await update(messageRef, {
-            text: newText,
+            text: encryptMessage(newText), // Cifrar el nuevo texto
+            encrypted: true, // Asegurarse de que la bandera esté presente
             editedAt: serverTimestamp()
         });
         console.log(`Mensaje ${messageToEditId} editado.`);
@@ -1713,7 +1745,8 @@ function handleForwardSend() {
     const forwardedMessage = {
         sender: currentUser,
         receiver: forwardRecipient,
-        text: messageToForward.text, // El texto original
+        text: messageToForward.text, // El texto ya está cifrado, lo pasamos tal cual
+        encrypted: messageToForward.encrypted || false, // Mantenemos la bandera de cifrado
         timestamp: serverTimestamp(),
         read: false,
         reactions: {},
