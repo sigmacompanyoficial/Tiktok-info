@@ -117,16 +117,13 @@ const videoCallMainButton = document.getElementById('video-call-main-button');
 const localVideo = document.getElementById('local-video');
 const remoteVideo = document.getElementById('remote-video');
 const videoCallModal = document.getElementById('video-call-modal');
+const startCallButton = document.getElementById('start-call-button');
+const hangupButton = document.getElementById('hangup-button');
 const toggleAudioButton = document.getElementById('toggle-audio-button');
 const toggleVideoButton = document.getElementById('toggle-video-button');
 const userSearchInput = document.getElementById('user-search-input'); // **NUEVO: Referencia al input de búsqueda**
 
-// **CORRECCIÓN: Ocultar el botón de videollamada temporalmente mientras se refactoriza**
-if (videoCallMainButton) videoCallMainButton.style.display = 'none';
-
 // --- ELEMENTOS DE VIDEOLLAMADA (NUEVO FLUJO PROFESIONAL) ---
-const startCallButton = document.getElementById('start-call-button');
-const hangupButton = document.getElementById('hangup-button');
 const callStatusOverlay = document.getElementById('call-status-overlay'); // Overlay de estado (Llamando...)
 const callStatusText = document.getElementById('call-status-text'); // Texto dentro del overlay
 const toggleCallChatButton = document.getElementById('toggle-call-chat-button'); // Botón para abrir chat en llamada
@@ -167,25 +164,27 @@ let localTimeInterval = null; // **NUEVO: Intervalo para la hora local del conta
 
 // --- 3. CONFIGURACIÓN Y VARIABLES DE WEBRTC ---
 const iceServersConfiguration = {
-    // **CORRECCIÓN CRÍTICA PARA CONECTIVIDAD MÓVIL/WIFI:**
+    // **MEJORA CRÍTICA PARA CONECTIVIDAD MÓVIL/WIFI:**
     // Se utiliza el proyecto OpenRelay (https://www.metered.ca/tools/openrelay/) que proporciona
-    // servidores STUN y TURN gratuitos y actualizados para desarrollo. Esto es esencial
-    // para que la conexión funcione entre dispositivos en redes diferentes (ej. móvil en 4G y PC en WiFi).
+    // servidores STUN y TURN gratuitos y actualizados. Esto es esencial para que la conexión
+    // funcione entre dispositivos en redes diferentes (ej. móvil en 4G y PC en WiFi).
     iceServers: [
         { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:openrelay.metered.ca:80' },
         { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
         { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
         { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-    ],
+    ],    
+    iceCandidatePoolSize: 10, // Optimización para recoger candidatos más rápido
 };
 
 let peerConnection;
 let localStream;
 let remoteStream; // NUEVO: Stream para los tracks remotos
 let currentCallId = null;
-let isCallInProgress = false; // NUEVO: Control de estado de la llamada
-let iceCandidateQueue = []; // NUEVO: Cola para candidatos ICE
+let isCallInProgress = false; // Control de estado de la llamada
+let iceCandidateQueue = []; // Cola para candidatos ICE
+let callListeners = {}; // Almacena los listeners de Firebase para poder limpiarlos
 
 // NUEVAS VARIABLES PARA PAGINACIÓN Y OPTIMIZACIÓN
 const MESSAGES_PER_PAGE = 15; // Lote de 15 mensajes
@@ -1664,17 +1663,21 @@ function toggleReaction(messageId, emoji) {
 // --- 12. LÓGICA DE VIDEOLLAMADA PROFESIONAL (WEBRTC + REALTIME DATABASE) ---
 // ==========================================================
 
+
 /**
- * Prepara y muestra el modal de pre-llamada (lobby). Esta función ahora es el punto de entrada para iniciar una llamada.
+ * Prepara y muestra el modal de pre-llamada (lobby). 
+ * Esta función ahora es el punto de entrada para iniciar una llamada.
  */
-async function setupAndShowPreCallUI() {
+async function setupPreCallUI() {
     videoCallModal.style.display = 'block';
     videoCallModal.classList.remove('in-call'); // Asegura que estemos en estado de pre-llamada
     
-    hangupButton.style.display = 'flex'; // Ahora es el botón de cancelar/cerrar
+    // El botón de colgar ahora sirve para cerrar el modal de pre-llamada
+    hangupButton.style.display = 'flex'; 
     startCallButton.style.display = 'flex';
     toggleCallChatButton.style.display = 'none'; // Ocultar chat en pre-llamada
     remoteVideo.style.display = 'none';
+    remoteVideo.srcObject = null;
 
     callStatusText.textContent = 'Preparando para llamar...';
     callStatusOverlay.style.display = 'flex';
@@ -1695,40 +1698,40 @@ async function setupAndShowPreCallUI() {
  * @param {string} callId - El ID de la llamada en Realtime Database.
  */
 function createPeerConnection(callId) {
-    // 1. Crear la conexión con los servidores ICE
+    // 1. Crear la conexión con la configuración de servidores ICE
     peerConnection = new RTCPeerConnection(iceServersConfiguration);
 
-    // 2. Limpiar la cola de candidatos de una llamada anterior
+    // 2. Limpiar la cola de candidatos de una posible llamada anterior
     iceCandidateQueue = [];
 
-    // 3. Añadir los tracks del stream local a la conexión para enviarlos al otro par
+    // 3. Añadir los tracks del stream local a la conexión para enviarlos al otro peer
     localStream.getTracks().forEach(track => {
         peerConnection.addTrack(track, localStream);
     });
 
-    // 4. Evento clave: se dispara cuando llega un track de audio o video del otro par
+    // 4. Evento clave: se dispara cuando llega un track de audio o video del otro peer
     peerConnection.ontrack = event => {
-        // Añadir el track recibido a nuestro stream remoto
-        remoteStream.addTrack(event.track, remoteStream);
-
-        // **CORRECCIÓN CLAVE**: Forzar la reproducción del vídeo para "despertarlo"
-        if (event.track.kind === 'video') {
-            remoteVideo.play().catch(e => console.error("Error al intentar reproducir el video remoto:", e));
-        }
+        console.log("Track remoto recibido:", event.track.kind);
+        // Añadir el track recibido a nuestro stream remoto. El elemento <video> ya está escuchando este stream.
+        event.streams[0].getTracks().forEach(track => {
+            remoteStream.addTrack(track);
+        });
     };
 
     // 5. Cuando se encuentran candidatos ICE locales, enviarlos a Firebase
     peerConnection.onicecandidate = event => {
         if (event.candidate) {
+            console.log("Candidato ICE local encontrado y enviado a Firebase.");
             const candidatesRef = ref(database, `calls/${callId}/candidates`);
             push(candidatesRef, { ...event.candidate.toJSON(), sender: currentUser });
         }
     };
 
-    // 6. Listeners para depuración del estado de la conexión
+    // 6. Listeners para monitorizar y depurar el estado de la conexión
     peerConnection.oniceconnectionstatechange = () => {
         if (peerConnection) {
             console.log(`Estado de la conexión ICE: ${peerConnection.iceConnectionState}`);
+            // Si la conexión se establece, ocultar el overlay de "Conectando..."
             if (peerConnection.iceConnectionState === 'connected' || peerConnection.iceConnectionState === 'completed') {
                 callStatusOverlay.style.display = 'none'; // Ocultar "Conectando..."
             }
@@ -1736,12 +1739,13 @@ function createPeerConnection(callId) {
     };
 
     peerConnection.onconnectionstatechange = () => {
-        console.log(`Estado de la conexión del Peer: ${peerConnection.connectionState}`);
+        if (peerConnection) console.log(`Estado de la conexión del Peer: ${peerConnection.connectionState}`);
     };
 }
 
 /**
  * Inicia una nueva llamada (Caller).
+ * Esta función es llamada al pulsar el botón "Llamar" en el modal de pre-llamada.
  */
 async function initiateCall() {
     if (isCallInProgress) {
@@ -1758,7 +1762,7 @@ async function initiateCall() {
         return;
     }
 
-    // Cambiar la UI al estado "llamando"
+    // Cambiar la UI al estado "llamando..."
     startCallButton.style.display = 'none';
     videoCallModal.classList.add('in-call');
     callStatusText.textContent = `Llamando a ${calleeId}...`;
@@ -1768,29 +1772,33 @@ async function initiateCall() {
     const newCallRef = push(callsRef);
     currentCallId = newCallRef.key;
 
-    // 1. Crear la conexión y añadir los tracks locales ANTES de crear la oferta
+    // 1. Crear la conexión. Los tracks ya se añadieron al crear el peerConnection.
     createPeerConnection(currentCallId);
 
+    // 2. Crear la oferta SDP
     const offerDescription = await peerConnection.createOffer();
     await peerConnection.setLocalDescription(offerDescription);
 
     const offer = {
         sdp: offerDescription.sdp,
         type: offerDescription.type,
-    };
+    };    
 
-    // 2. Guardar la oferta en Firebase para que el destinatario la reciba
+    // 3. Guardar la oferta en Firebase para que el destinatario la reciba
     await set(newCallRef, { offer, callerId: currentUser, calleeId: calleeId });
 
-    // 3. Escuchar la respuesta (answer) del otro usuario
-    onValue(newCallRef, (snapshot) => {
+    // 4. Escuchar la respuesta (answer) del otro usuario
+    const callRefListener = onValue(newCallRef, (snapshot) => {
         const data = snapshot.val();
+        // Si la respuesta llega y aún no la hemos procesado...
         if (data && data.answer && peerConnection && !peerConnection.currentRemoteDescription) {
-            // 4. Establecer la descripción remota y luego procesar los candidatos en cola
+            console.log("Respuesta (Answer) recibida de Firebase.");
+            // 5. Establecer la descripción remota y luego procesar los candidatos en cola
             peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
                 .then(() => {
                     processIceCandidateQueue();
                     toggleCallChatButton.style.display = 'flex'; // Mostrar botón de chat
+                    listenForCallChatMessages(currentCallId);
                 })
                 .catch(e => console.error("Error al establecer la respuesta remota:", e));
         }
@@ -1798,14 +1806,17 @@ async function initiateCall() {
 
     // 5. Escuchar los candidatos ICE del otro usuario
     const candidatesRef = ref(database, `calls/${currentCallId}/candidates`);
-    onChildAdded(candidatesRef, (snapshot) => {
+    const candidatesListener = onChildAdded(candidatesRef, (snapshot) => {
         const candidateData = snapshot.val();
-        // Poner en cola los candidatos en lugar de añadirlos directamente
+        // Si el candidato es del otro peer, lo añadimos a la cola o directamente si ya es seguro.
         if (!caseInsensitiveEquals(candidateData.sender, currentUser)) {
+            console.log("Candidato ICE remoto recibido de Firebase.");
             const candidate = new RTCIceCandidate(candidateData);
             peerConnection.remoteDescription ? peerConnection.addIceCandidate(candidate) : iceCandidateQueue.push(candidate);
         }
     });
+
+    callListeners[currentCallId] = { callRefListener, candidatesListener, ref: newCallRef, candidatesRef };
 }
 
 /**
@@ -1813,7 +1824,7 @@ async function initiateCall() {
  * @param {string} callId - El ID de la llamada.
  * @param {object} offer - La oferta SDP recibida.
  */
-async function acceptAndAnswerCall(callId, offer) {
+async function answerCall(callId, offer) {
     if (isCallInProgress) {
         console.warn("Intentando responder una llamada mientras otra está en curso.");
         return;
@@ -1821,7 +1832,7 @@ async function acceptAndAnswerCall(callId, offer) {
     isCallInProgress = true;
     currentCallId = callId;
     
-    // 1. Mostrar modal y preparar UI para llamada activa
+    // 1. Mostrar modal y preparar UI para una llamada activa
     videoCallModal.style.display = 'block';
     videoCallModal.classList.add('in-call');
     startCallButton.style.display = 'none';
@@ -1833,6 +1844,7 @@ async function acceptAndAnswerCall(callId, offer) {
     // 2. Preparar el contenedor de vídeo remoto
     remoteStream = new MediaStream();
     remoteVideo.srcObject = remoteStream;
+    remoteVideo.style.display = 'block';
 
     // 3. Iniciar cámara y micrófono locales
     try {
@@ -1846,28 +1858,35 @@ async function acceptAndAnswerCall(callId, offer) {
         return;
     }
 
-    // 4. Crear conexión, añadir tracks locales y establecer la descripción remota (la oferta)
+    // 4. Crear la conexión. Los tracks locales se añadirán automáticamente.
     createPeerConnection(callId);
+    
+    // 5. Establecer la oferta recibida como la descripción remota
     await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
+    console.log("Oferta (Offer) establecida como descripción remota.");
 
-    const answerDescription = await peerConnection.createAnswer(); // 5. Crear la respuesta
+    // 6. Crear la respuesta (Answer). Esto solo se puede hacer DESPUÉS de setRemoteDescription.
+    const answerDescription = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answerDescription);
 
     const answer = {
         type: answerDescription.type,
         sdp: answerDescription.sdp,
     };
+    console.log("Respuesta (Answer) creada y establecida como descripción local.");
 
-    // 6. Enviar la respuesta a Firebase
+    // 7. Enviar la respuesta a Firebase para que el iniciador la reciba
     const callNodeRef = ref(database, `calls/${callId}`);
     await update(callNodeRef, { answer });
+    console.log("Respuesta (Answer) enviada a Firebase.");
 
-    // 7. Escuchar los candidatos ICE del otro usuario
+    // 8. Escuchar los candidatos ICE del otro usuario
     const candidatesRef = ref(database, `calls/${callId}/candidates`);
-    onChildAdded(candidatesRef, (snapshot) => {
+    const candidatesListener = onChildAdded(candidatesRef, (snapshot) => {
         const candidateData = snapshot.val();
-        // Añadir candidatos directamente, ya que la descripción remota ya está establecida
+        // Añadir candidatos directamente, ya que la descripción remota (offer) ya está establecida
         if (!caseInsensitiveEquals(candidateData.sender, currentUser)) {
+            console.log("Candidato ICE remoto recibido de Firebase (respondiendo).");
             if (peerConnection) peerConnection.addIceCandidate(new RTCIceCandidate(candidateData));
         }
     });
@@ -1877,7 +1896,16 @@ async function acceptAndAnswerCall(callId, offer) {
  * Cuelga la llamada, limpia los recursos y el estado.
  */
 function hangupCall() {
-    // 1. Detener todos los tracks de medios (cámara, micrófono)
+    // 1. Limpiar listeners de Firebase para evitar fugas de memoria
+    if (currentCallId && callListeners[currentCallId]) {
+        const { callRefListener, candidatesListener, ref: callRef, candidatesRef, chatListener, chatRef } = callListeners[currentCallId];
+        if (callRefListener) callRefListener(); // Detiene el listener onValue
+        if (candidatesListener) candidatesListener(); // Detiene el listener onChildAdded
+        if (chatListener) chatListener(); // Detiene el listener del chat
+        delete callListeners[currentCallId];
+    }
+
+    // 2. Detener todos los tracks de medios (cámara, micrófono)
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
         localStream = null;
@@ -1889,14 +1917,14 @@ function hangupCall() {
         peerConnection = null;
     }
 
-    // 3. Eliminar el nodo de la llamada de Firebase para notificar al otro usuario y limpiar
+    // 4. Eliminar el nodo de la llamada de Firebase para notificar al otro usuario y limpiar
     if (currentCallId) {
         const callNodeRef = ref(database, `calls/${currentCallId}`);
         // Usamos remove() para borrar completamente el nodo
         remove(callNodeRef).catch(e => console.error("Error al limpiar el nodo de la llamada:", e));
     }
 
-    // 4. Limpiar el estado local
+    // 5. Limpiar el estado local
     isCallInProgress = false;
     currentCallId = null;
     iceCandidateQueue = [];
@@ -1910,7 +1938,7 @@ function hangupCall() {
     callChatPanel.classList.remove('show'); // Ocultar chat
     callChatMessages.innerHTML = ''; // Limpiar chat
 
-    // **NUEVO**: Detener el sonido de colgar si se estaba reproduciendo
+    // Reproducir sonido de colgar
     if (hangupSound) {
         hangupSound.play().catch(e => console.warn("No se pudo reproducir sonido de colgar."));
     }
@@ -1920,6 +1948,7 @@ function hangupCall() {
  * Procesa los candidatos ICE que se pusieron en cola antes de que la descripción remota estuviera lista.
  */
 function processIceCandidateQueue() {
+    console.log(`Procesando ${iceCandidateQueue.length} candidatos ICE en cola.`);
     while (iceCandidateQueue.length > 0) {
         peerConnection.addIceCandidate(iceCandidateQueue.shift());
     }
@@ -1943,7 +1972,7 @@ function showIncomingCallBanner(callerId, callId, offer) {
     // Configurar el botón de aceptar
     if (bannerAcceptButton) bannerAcceptButton.onclick = async () => {
         if (closeIncomingCallBanner) closeIncomingCallBanner();
-        await acceptAndAnswerCall(callId, offer);
+        await answerCall(callId, offer);
     };
 
     // Configurar el botón de rechazar
@@ -1974,14 +2003,14 @@ function listenForIncomingCalls() {
         const callData = snapshot.val();
         const callId = snapshot.key;
 
-        // Si la llamada es para mí y aún no tiene respuesta
-        if (callData && caseInsensitiveEquals(callData.calleeId, currentUser) && !callData.answer) {
+        // Si la llamada es para mí, no está en curso y aún no tiene respuesta
+        if (callData && caseInsensitiveEquals(callData.calleeId, currentUser) && !isCallInProgress && !callData.answer) {
             showIncomingCallBanner(callData.callerId, callId, callData.offer);
         }
     });
 
     // Escuchar cuando una llamada se elimina (alguien colgó)
-    onChildRemoved(callsRef, (snapshot) => {
+    const removedListener = onChildRemoved(callsRef, (snapshot) => {
         const callId = snapshot.key;
         if (callId === currentCallId && isCallInProgress) {
             hangupCall();
@@ -1990,7 +2019,7 @@ function listenForIncomingCalls() {
     });
 
     // Escuchar cuando una llamada cambia (ej. es rechazada)
-    onChildChanged(callsRef, (snapshot) => {
+    const changedListener = onChildChanged(callsRef, (snapshot) => {
         const callData = snapshot.val();
         const callId = snapshot.key;
         if (callId === currentCallId && isCallInProgress) {
@@ -2000,6 +2029,23 @@ function listenForIncomingCalls() {
                 }
         }
     });
+}
+/**
+ * Activa el listener para los mensajes del chat de la llamada actual.
+ * @param {string} callId 
+ */
+function listenForCallChatMessages(callId) {
+    const chatRef = ref(database, `calls/${callId}/chat`);
+    const chatListener = onChildAdded(chatRef, (snapshot) => {
+        const msg = snapshot.val();
+        const msgElement = document.createElement('div');
+        msgElement.classList.add('call-chat-msg');
+        msgElement.innerHTML = `<strong>${msg.sender}:</strong><p>${msg.text}</p>`;
+        callChatMessages.appendChild(msgElement);
+        callChatMessages.scrollTop = callChatMessages.scrollHeight;
+    });
+    // Guardar el listener para poder limpiarlo después
+    if (callListeners[callId]) callListeners[callId].chatListener = chatListener;
 }
 
 /**
@@ -2666,14 +2712,14 @@ videoCallMainButton.addEventListener('click', async () => {
     if (!activeChatUser) {
         alert("Por favor, selecciona un chat para iniciar una videollamada.");
         return;
-    }
-    await setupAndShowPreCallUI();
+    }    
+    await setupPreCallUI();
 });
 
 startCallButton.addEventListener('click', () => {
     // **NUEVO**: Preparar el stream remoto antes de iniciar la llamada
     remoteStream = new MediaStream();
-    remoteVideo.srcObject = remoteStream;
+    remoteVideo.srcObject = remoteStream;    
     remoteVideo.style.display = 'block'; // Asegurarse de que el elemento de video sea visible
 
     initiateCall();
@@ -2718,24 +2764,9 @@ callChatForm.addEventListener('submit', (e) => {
     if (text && currentCallId) {
         const chatRef = ref(database, `calls/${currentCallId}/chat`);
         push(chatRef, { sender: currentUser, text });
-        callChatInput.value = '';
+        callChatInput.value = '';    
     }
 });
-
-// **CORRECCIÓN**: La escucha de mensajes de chat debe estar dentro de la lógica de la llamada,
-// cuando `currentCallId` es válido. Se ha movido a las funciones `initiateCall` y `acceptAndAnswerCall`.
-// Sin embargo, para simplificar, podemos usar un listener que se active cuando `currentCallId` cambie.
-// Por ahora, lo dejamos como estaba, pero es un punto de mejora.
-// onChildAdded(ref(database, `calls/${currentCallId}/chat`), (snapshot) => {
-//     if (currentCallId) {
-//         const msg = snapshot.val();
-//         const msgElement = document.createElement('div');
-//         msgElement.classList.add('call-chat-msg');
-//         msgElement.innerHTML = `<strong>${msg.sender}:</strong><p>${msg.text}</p>`;
-//         callChatMessages.appendChild(msgElement);
-//         callChatMessages.scrollTop = callChatMessages.scrollHeight;
-//     }
-// });
 
 /**
  * Elimina todos los mensajes del chat activo de la base de datos y de la vista.
