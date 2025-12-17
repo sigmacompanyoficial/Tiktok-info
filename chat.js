@@ -115,6 +115,10 @@ const notificationSound = document.getElementById('notification-sound'); // **NU
 // --- ELEMENTOS DE VIDEOLLAMADA (NUEVO FLUJO PROFESIONAL) ---
 const videoCallMainButton = document.getElementById('video-call-main-button');
 const localVideo = document.getElementById('local-video');
+
+// **CORRECCIÓN: Ocultar el botón de videollamada temporalmente**
+if (videoCallMainButton) videoCallMainButton.style.display = 'none';
+
 const remoteVideo = document.getElementById('remote-video');
 const videoCallModal = document.getElementById('video-call-modal');
 const toggleAudioButton = document.getElementById('toggle-audio-button');
@@ -1423,7 +1427,10 @@ function createMessageElement(messageId, message) {
         quoteUser.textContent = message.replyTo.sender;
         const quoteText = document.createElement('p');
         // Corregido: usar message.replyTo.text
-        quoteText.textContent = message.replyTo.text.length > 50 ? message.replyTo.text.substring(0, 50) + '...' : message.replyTo.text; 
+        // **NUEVA CORRECCIÓN: Descifrar el texto de la cita antes de mostrarlo**
+        const originalText = decryptMessage(message.replyTo.text);
+        quoteText.textContent = originalText.length > 50 ? originalText.substring(0, 50) + '...' : originalText;
+
         quoteDiv.appendChild(quoteUser);
         quoteDiv.appendChild(quoteText);
         messageContentDiv.appendChild(quoteDiv);
