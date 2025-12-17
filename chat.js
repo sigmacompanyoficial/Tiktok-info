@@ -171,19 +171,16 @@ let localTimeInterval = null; // **NUEVO: Intervalo para la hora local del conta
 
 // --- 3. CONFIGURACIÓN Y VARIABLES DE WEBRTC ---
 const iceServersConfiguration = {
-    // **NUEVA CORRECCIÓN: Usar un conjunto de servidores STUN/TURN más robusto para las pruebas.**
-    // El servidor anterior (openrelay) puede ser inestable. Usaremos los servidores públicos de Twilio,
-    // que suelen ser más fiables para desarrollo.
-    // Para una aplicación en producción, lo ideal es contratar un servicio de TURN (como el de Twilio)
-    // o alojar tu propio servidor (Coturn) para garantizar la disponibilidad.
+    // **CORRECCIÓN CRÍTICA PARA CONECTIVIDAD MÓVIL/WIFI:**
+    // Se utiliza el proyecto OpenRelay (https://www.metered.ca/tools/openrelay/) que proporciona
+    // servidores STUN y TURN gratuitos y actualizados para desarrollo. Esto es esencial
+    // para que la conexión funcione entre dispositivos en redes diferentes (ej. móvil en 4G y PC en WiFi).
     iceServers: [
-        { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
-        {
-            urls: "turn:global.turn.twilio.com:3478?transport=udp",
-            // NOTA: Estas son credenciales de prueba públicas de Twilio.
-            username: "7b932b5399815b31995856b3455154b2363a909589456255902921568551e6e3",
-            credential: "aV32yfs+gYxK82+3sC2b3UpFjvr9+Wk3J6chWc0b4lY=",
-        },
+        { urls: 'stun:stun.l.google.com:19302' },
+        { urls: 'stun:openrelay.metered.ca:80' },
+        { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
+        { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
     ],
 };
 
