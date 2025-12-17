@@ -167,12 +167,20 @@ let localTimeInterval = null; // **NUEVO: Intervalo para la hora local del conta
 
 // --- 3. CONFIGURACIÓN Y VARIABLES DE WEBRTC ---
 const iceServersConfiguration = {
+    // **CORRECCIÓN: Añadir un servidor TURN para mejorar la conectividad, especialmente en móviles.**
+    // Los servidores STUN son suficientes para conexiones simples, pero TURN es necesario como relé
+    // cuando la conexión directa (P2P) falla, lo cual es común en redes 4G/5G o corporativas.
+    // NOTA: Este es un servidor TURN público y gratuito con limitaciones. Para una aplicación en producción,
+    // deberías considerar un servicio de pago (ej. Twilio) o alojar tu propio servidor Coturn.
     iceServers: [
-        {
-            urls: 'stun:stun.l.google.com:19302'
-        },
+        { urls: 'stun:stun.l.google.com:19302' },
         { urls: 'stun:stun1.l.google.com:19302' },
         { urls: 'stun:stun.services.mozilla.com' },
+        {
+            urls: "turn:openrelay.metered.ca:80",
+            username: "openrelayproject",
+            credential: "openrelayproject",
+        },
     ],
 };
 
@@ -1706,6 +1714,18 @@ function createPeerConnection(callId) {
                 sender: currentUser
             });
         }
+    };
+
+    // **NUEVO: Añadir listeners para depurar el estado de la conexión.**
+    // Esto nos ayudará a ver en la consola si la conexión se establece, falla, o se desconecta.
+    peerConnection.oniceconnectionstatechange = () => {
+        if (peerConnection) {
+            console.log(`Estado de la conexión ICE: ${peerConnection.iceConnectionState}`);
+        }
+    };
+
+    peerConnection.onconnectionstatechange = () => {
+        console.log(`Estado de la conexión del Peer: ${peerConnection.connectionState}`);
     };
 }
 
