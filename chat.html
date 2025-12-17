@@ -69,8 +69,10 @@
     .app-container {
         display: flex;
         height: 100vh;
-        width: 100%; /* Ocupa todo el ancho */
+        max-width: 1400px;
+        margin: 0 auto;
         background: var(--white);
+        box-shadow: var(--shadow-lg);
     }
 
     /* SIDEBAR - LISTA DE CONVERSACIONES */
@@ -285,10 +287,6 @@
         background: var(--white);
         position: relative;
     }
-    /* NUEVO: Ocultar el panel de chat si no hay un chat activo */
-    .chat-room-panel:not(.has-active-chat) {
-        display: none;
-    }
 
     .chat-header {
         padding: 12px 20px;
@@ -408,12 +406,6 @@
 
     .mobile-actions-menu .menu-item:hover {
         background: var(--hover-bg);
-    }
-
-    /* NUEVO: Asegurar que los botones en la cabecera móvil se muestren en línea */
-    .mobile-actions-wrapper {
-        display: flex;
-        gap: 8px;
     }
 
     .chat-header-actions {
@@ -1109,50 +1101,26 @@
         background: var(--text-secondary);
     }
 
-    /* --- NUEVO: ESTADO INICIAL PROFESIONAL --- */
-    .initial-state-container {
-        flex-grow: 1;
+    /* EMPTY STATE - CORREGIDO PARA MODO OSCURO */
+    .chat-messages:empty::after {
+        content: 'Selecciona un chat para comenzar';
         display: flex;
-        flex-direction: column;
         align-items: center;
         justify-content: center;
-        background: var(--chat-bg);
-        text-align: center;
-        padding: 20px;
-    }
-
-    .initial-state-icon {
-        font-size: 64px;
-        color: var(--primary-color);
-        margin-bottom: 24px;
-        opacity: 0.8;
-    }
-
-    .initial-state-container h2 {
-        font-size: 22px;
-        font-weight: 600;
-        color: var(--text-primary);
-        margin-bottom: 8px;
-    }
-
-    .initial-state-container p {
-        font-size: 15px;
+        height: 100%;
+        width: 100%;
         color: var(--text-secondary);
-        max-width: 350px;
+        font-size: 16px;
+        position: absolute;
+        top: 0;
+        left: 0;
+        pointer-events: none;
     }
-
-    /* --- NUEVO: Estilo para el aviso de cifrado --- */
-    .encryption-notice {
-        margin-top: 40px; /* Espacio para separarlo del texto principal */
-        font-size: 13px;
-        color: var(--text-secondary);
-        display: flex;
-        align-items: center;
-        gap: 8px;
-    }
-
+    
+    /* MODIFICACIÓN: Mostrar el mensaje de "Selecciona un chat" por defecto en escritorio */
     @media (max-width: 900px) {
-        .initial-state-container {
+        .chat-room-panel:not(.active) .chat-messages:empty::after {
+            /* Ocultar el mensaje "Selecciona un chat" cuando el chat-panel está oculto en móvil */
             display: none;
         }
     }
@@ -1389,20 +1357,6 @@
                 </div>
         </div>
 
-        <!-- NUEVO: Contenedor de estado inicial -->
-        <div class="initial-state-container" id="initial-state-container">
-            <div class="initial-state-icon">
-                <i class="fas fa-comments"></i>
-            </div>
-            <h2>Bienvenido a Sigma Xat</h2>
-            <p>Selecciona una conversación para empezar a chatear o busca un nuevo contacto para iniciar una.</p>
-            <!-- NUEVO: Aviso de cifrado -->
-            <p class="encryption-notice">
-                <i class="fas fa-lock"></i> Cifrado de extremo a extremo
-            </p>
-        </div>
-        <!-- FIN del contenedor de estado inicial -->
-
         <div class="chat-room-panel" id="chat-room-panel">
             <div class="chat-header">
                 <div class="contact-info">
@@ -1410,18 +1364,20 @@
                     <div class="contact-details">
                         <div class="contact-name-wrapper">
                             <h3 id="current-chat-name">Selecciona un chat</h3>
-                            <span id="header-streak-indicator"></span>                           
+                            <span id="header-streak-indicator"></span>
+                            <!-- NUEVO: Contenedor para la hora local -->
+                            <span id="contact-local-time"></span>
                         </div>
                         <span class="contact-status-text" id="contact-status-text">Desconectado</span>
                     </div>
                 </div>
                 <div class="chat-header-actions">
-                    <!-- Botones siempre visibles -->
+                    <!-- BOTÓN DE VIDEOLLAMADA AHORA VISIBLE -->
                     <button class="icon-button" id="video-call-main-button" title="Iniciar videollamada">
                         <i class="fas fa-video"></i>
                     </button>
-                    <!-- Contenedor solo para el menú desplegable -->
-                    <div class="mobile-actions-wrapper"> 
+                    <!-- Botón y Menú Unificado para Móvil y Escritorio -->
+                    <div class="mobile-actions-wrapper">
                         <button class="icon-button" id="mobile-options-button" title="Más opciones">
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
@@ -1598,228 +1554,166 @@
     </style>
     <!-- FIN Banner de Llamada Entrante -->
 
-    <audio id="notification-sound" src="https://firebasestorage.googleapis.com/v0/b/sigma-xat2.appspot.com/o/notification.mp3?alt=media&token=1234" preload="auto"></audio>
-    <audio id="ringtone-sound" src="https://firebasestorage.googleapis.com/v0/b/sigma-xat2.appspot.com/o/ringtone.mp3?alt=media&token=5678" preload="auto" loop></audio>
-    <audio id="hangup-sound" src="https://firebasestorage.googleapis.com/v0/b/sigma-xat2.appspot.com/o/hangup.mp3?alt=media&token=9101" preload="auto"></audio>
+    <!-- <audio id="notification-sound" src="notification.mp3" preload="auto"></audio> -->
+    <!-- <audio id="ringtone-sound" src="ringtone.mp3" preload="auto" loop></audio> -->
+    <!-- <audio id="hangup-sound" src="hangup.mp3" preload="auto"></audio> -->
 
     <script type="module" src="chat.js"></script>
-    <!-- ======================================================= -->
-    <!-- === NUEVO: MODAL DE VIDEOLLAMADA A PANTALLA COMPLETA === -->
-    <!-- ======================================================= -->
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const username = sessionStorage.getItem('username');
+            if (username) {
+                const userAvatarMain = document.getElementById('user-avatar-main');
+                if (userAvatarMain) {
+                    userAvatarMain.textContent = username.charAt(0).toUpperCase();
+                }
+            }
+
+            // Lógica para el menú de acciones en móvil
+            const mobileOptionsButton = document.getElementById('mobile-options-button');
+            const chatHeaderActions = document.querySelector('.chat-header-actions');
+            let mobileMenu = null;
+
+            // --- NUEVO: Crear botones de acción ocultos para que el script pueda hacerles 'click' ---
+            const hiddenActions = document.createElement('div');
+            hiddenActions.style.display = 'none';
+            hiddenActions.innerHTML = `
+                <!-- El botón de videollamada ya no necesita estar aquí, está visible en el header -->
+                <button id="search-in-chat-button"></button>
+                <button id="chat-stats-button"></button>
+                <button id="delete-chat-messages-button"></button>
+            `;
+            document.body.appendChild(hiddenActions);
+
+            mobileOptionsButton.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (!mobileMenu) {
+                    mobileMenu = document.createElement('div');
+                    mobileMenu.className = 'mobile-actions-menu';
+                    mobileMenu.innerHTML = `
+                        <div class="menu-item" data-action="video-call-main"><i class="fas fa-video fa-fw"></i> Iniciar videollamada</div>
+                        <div class="menu-item" data-action="search-in-chat"><i class="fas fa-search fa-fw"></i> Buscar en el chat</div>
+                        <div class="menu-item" data-action="chat-stats"><i class="fas fa-chart-line fa-fw"></i> Ver estadísticas</div>
+                        <div class="menu-item" data-action="delete-chat-messages"><i class="fas fa-trash fa-fw"></i> Eliminar mensajes</div>
+                    `;
+                    document.querySelector('.mobile-actions-wrapper').appendChild(mobileMenu);
+
+                    mobileMenu.addEventListener('click', (event) => {
+                        const action = event.target.closest('.menu-item')?.dataset.action;
+                        if (action) {
+                            // Si la acción es la videollamada, usamos el ID correcto
+                            const buttonId = action === 'video-call-main' ? 'video-call-main-button' : `${action.replace(/-/g, '-')}-button`;
+                            const buttonToClick = document.getElementById(buttonId);
+                            if (buttonToClick) buttonToClick.click();
+
+                            mobileMenu.classList.remove('show');
+                        }
+                    });
+
+                    document.addEventListener('click', () => {
+                        mobileMenu?.classList.remove('show');
+                    });
+                }
+                mobileMenu.classList.toggle('show');
+            });
+        });
+    </script>
+    <!-- ================================================== -->
+    <!-- === NUEVO: MODAL DE VIDEOLLAMADA (PANTALLA COMPLETA) === -->
+    <!-- ================================================== -->
     <div id="video-call-modal" class="call-modal-overlay">
-        <!-- Video Remoto (ocupa todo el fondo) -->
-        <video id="remote-video" autoplay class="remote-video-feed"></video>
-        
-        <!-- Video Local (ventana flotante) -->
-        <video id="local-video" autoplay muted class="local-video-preview"></video>
+        <!-- Vídeos en el fondo -->
+        <video id="remote-video" autoplay class="video-feed remote"></video>
+        <video id="local-video" autoplay muted class="video-feed local"></video>
 
-        <!-- Overlay de Información y Controles -->
-        <div class="call-ui-overlay">
-            <div class="call-header-info">
-                <span id="call-contact-name"></span>
-                <span id="call-status-text">Conectando...</span>
+        <!-- Overlay de estado (Llamando..., Conectando...) -->
+        <div id="call-status-overlay" class="call-status-overlay">
+            <p id="call-status-text">Iniciando cámara...</p>
+        </div>
+
+        <!-- Controles de la llamada -->
+        <div class="call-ui-container">
+            <div class="call-controls">
+                <button id="toggle-video-button" class="call-control-btn"><i class="fas fa-video"></i></button>
+                <button id="toggle-audio-button" class="call-control-btn"><i class="fas fa-microphone"></i></button>
+                
+                <!-- Botón de Iniciar Llamada (solo en pre-llamada) -->
+                <button id="start-call-button" class="call-control-btn start-call"><i class="fas fa-phone"></i></button>
+
+                <!-- Botón de Colgar (siempre visible, cambia de función) -->
+                <button id="hangup-button" class="call-control-btn hangup"><i class="fas fa-phone-slash"></i></button>
+
+                <!-- NUEVO: Botón para abrir el chat de la llamada -->
+                <button id="toggle-call-chat-button" class="call-control-btn" style="display: none;"><i class="fas fa-comment"></i></button>
             </div>
+        </div>
 
-            <!-- **NUEVO: Contenedor para acciones post-llamada (ej. no contestada)** -->
-            <div class="call-actions-overlay" id="post-call-actions" style="display: none;">
-                <button id="recall-button" class="control-button primary">
-                    <i class="fas fa-phone-alt"></i> Volver a llamar
-                </button>
-                <button id="return-to-chat-button" class="control-button secondary">
-                    <i class="fas fa-arrow-left"></i> Volver
-                </button>
+        <!-- NUEVO: Panel de Chat de la Videollamada -->
+        <div id="call-chat-panel" class="call-chat-panel">
+            <div class="chat-panel-header">
+                <h4>Chat de la llamada</h4>
+                <button id="close-call-chat-button">&times;</button>
             </div>
-            <div class="call-controls-bar" id="call-controls-bar">
-                <!-- Controles Pre-Llamada y Durante la Llamada -->
-                <div class="control-item">
-                    <button id="toggle-audio-button" class="control-button secondary" title="Silenciar Micrófono">
-                        <i class="fas fa-microphone"></i>
-                    </button>
-                    <span class="control-label">Micrófono</span>
-                </div>
-
-                <div class="control-item">
-                    <button id="toggle-video-button" class="control-button secondary" title="Detener Video">
-                        <i class="fas fa-video"></i>
-                    </button>
-                    <span class="control-label">Video</span>
-                </div>
-
-                <!-- Controles durante la llamada -->
-                <div id="in-call-controls" style="display: none; gap: 15px;">
-                    <div class="control-item hide-on-mobile">
-                        <button id="share-screen-button" class="control-button secondary" title="Compartir Pantalla">
-                            <i class="fas fa-desktop"></i>
-                        </button>
-                        <span class="control-label">Compartir</span>
-                    </div>
-                    <!-- Botón solo para móvil -->
-                    <div class="control-item mobile-only">
-                        <button id="switch-camera-button" class="control-button secondary" title="Cambiar Cámara">
-                            <i class="fas fa-sync-alt"></i>
-                        </button>
-                        <span class="control-label">Girar</span>
-                    </div>
-                </div>
-
-                <!-- Botón para llamar (se oculta después de llamar) -->
-                <button id="start-call-button" class="control-button primary" title="Llamar">
-                    <i class="fas fa-phone-alt"></i>
-                </button>
-
-                <!-- Botón de colgar siempre visible durante la llamada -->
-                <div class="control-item">
-                    <button id="hangup-button" class="control-button danger" title="Colgar">
-                        <i class="fas fa-phone-slash"></i>
-                    </button>
-                    <span class="control-label">Colgar</span>
-                </div>
+            <div class="call-chat-messages" id="call-chat-messages">
+                <!-- Mensajes del chat de la llamada aquí -->
             </div>
+            <form id="call-chat-form" class="call-chat-input-area">
+                <input type="text" id="call-chat-input" placeholder="Escribe un mensaje...">
+                <button type="submit"><i class="fas fa-paper-plane"></i></button>
+            </form>
         </div>
     </div>
 
-    <!-- === NUEVOS ESTILOS PARA EL MODAL DE VIDEOLLAMADA === -->
+    <!-- ================================================== -->
+    <!-- === NUEVOS ESTILOS PARA VIDEOLLAMADA === -->
+    <!-- ================================================== -->
     <style>
         .call-modal-overlay {
             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: #1c1c1e; /* Fondo oscuro sólido */
-            display: none; /* Se activa con JS */
-            z-index: 3000;
-            transition: opacity 0.3s;
-            opacity: 0;
+            background: #111; display: none; z-index: 3000;
         }
-        .call-modal-overlay.show {
-            display: block;
-            opacity: 1;
-        }
-
-        /* **NUEVO: Estilos para el overlay de acciones post-llamada** */
-        .call-actions-overlay {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            display: flex;
-            flex-direction: column;
-            gap: 20px;
-            z-index: 3020;
-            background: rgba(0, 0, 0, 0.5);
-            padding: 30px;
-            border-radius: 16px;
-        }
-
-        .remote-video-feed {
-            width: 100%; height: 100%; object-fit: contain; /* CAMBIO: De 'cover' a 'contain' para ver todo el video */
-        }
-
-        .local-video-preview {
-            position: absolute;
-            bottom: 100px; /* Espacio sobre los controles */
-            right: 20px;
-            width: 20%;
-            max-width: 240px;
-            min-width: 120px;
-            aspect-ratio: 4/3;
-            border-radius: 12px;
-            border: 2px solid rgba(255, 255, 255, 0.2);
-            box-shadow: 0 4px 15px rgba(0,0,0,0.4);
-            transform: scaleX(-1); /* Efecto espejo */
-            transition: all 0.3s;
-            z-index: 3010;
-        }
-
-        .call-ui-overlay {
-            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            display: flex; flex-direction: column; justify-content: space-between;
-            padding: 20px;
-            background: linear-gradient(to bottom, rgba(0,0,0,0.5) 0%, transparent 25%, transparent 75%, rgba(0,0,0,0.6) 100%);
-            opacity: 0;
-            transition: opacity 0.4s;
-        }
-        /* Mostrar controles al pasar el ratón o si la llamada no ha empezado */
-        .call-modal-overlay:hover .call-ui-overlay,
-        .call-modal-overlay.pre-call .call-ui-overlay {
-            opacity: 1;
-        }
-
-        .call-header-info {
-            color: white; text-shadow: 1px 1px 3px rgba(0,0,0,0.5);
-        }
-        #call-contact-name { font-size: 1.5rem; font-weight: 600; display: block; }
-        #call-status-text { font-size: 1rem; opacity: 0.8; }
-
-        .call-controls-bar {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 15px;
-            padding-bottom: 15px;
-            background: rgba(0, 0, 0, 0.2); /* Fondo semitransparente para los controles */
-        }
-        /* --- NUEVO: Contenedor para botón + etiqueta --- */
-        .control-item {
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            gap: 4px;
-        }
-        .control-label {
-            font-size: 12px;
-            color: white;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.5);
-        }
-        .control-button {
-            width: 56px; height: 56px; border-radius: 50%;
-            border: none; cursor: pointer; font-size: 18px;
-            display: flex; align-items: center; justify-content: center;
-            transition: all 0.2s;
-        }
-        .control-button.primary { background: #2ecc71; color: white; width: 70px; height: 56px; border-radius: 28px; }
-        .control-button.danger { background: #e74c3c; color: white; }
-        /* CAMBIO: Color de fondo para que se vea mejor sobre el video */
-        .control-button.secondary { background: rgba(255, 255, 255, 0.15); color: white; }
-        .control-button:hover { transform: translateY(-3px); box-shadow: 0 4px 8px rgba(0,0,0,0.2); }
+        .video-feed { position: absolute; top: 0; left: 0; width: 100%; height: 100%; object-fit: cover; transition: all 0.4s ease; }
+        .video-feed.local { z-index: 3002; transform: scaleX(-1); }
+        .video-feed.remote { z-index: 3001; display: none; }
         
-        /* Estilo para botones de audio/video desactivados */
-        .control-button.toggled-off {
-            background: var(--primary-color);
-            color: white;
+        /* Estado en llamada: el vídeo local se hace pequeño */
+        .in-call .video-feed.local {
+            width: 25%; height: auto; aspect-ratio: 16/9;
+            max-width: 220px; bottom: 85px; right: 20px;
+            top: auto; left: auto; border-radius: 12px;
+            border: 2px solid rgba(255,255,255,0.3); box-shadow: 0 5px 20px rgba(0,0,0,0.5);
         }
+        .in-call .video-feed.remote { display: block; }
 
-        .mobile-only { display: flex; } /* Se muestra en móvil */
-        .hide-on-mobile { display: none; } /* Se oculta en móvil */
+        .call-status-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3005; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem; font-weight: 600; text-shadow: 1px 1px 5px #000; }
+        .call-ui-container { position: absolute; bottom: 0; left: 0; width: 100%; z-index: 3010; padding: 20px; background: linear-gradient(to top, rgba(0,0,0,0.7), transparent); }
+        .call-controls { display: flex; justify-content: center; align-items: center; gap: 16px; }
+        .call-control-btn { width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer; font-size: 20px; color: white; display: flex; align-items: center; justify-content: center; transition: all 0.2s; background-color: rgba(255, 255, 255, 0.2); }
+        .call-control-btn:hover { background-color: rgba(255, 255, 255, 0.3); }
+        .call-control-btn.start-call { background-color: #2ecc71; }
+        .call-control-btn.hangup { background-color: #e74c3c; }
+        .call-control-btn.toggled-off { background-color: #34495e; }
+        .call-control-btn.toggled-off i { color: #ecf0f1; }
 
-        /* === ESTILOS RESPONSIVE PARA VIDEOLLAMADA === */
+        /* Panel de Chat de la Llamada */
+        .call-chat-panel { position: fixed; top: 0; right: -100%; width: 340px; height: 100%; background: var(--white); z-index: 3020; display: flex; flex-direction: column; box-shadow: -5px 0 20px rgba(0,0,0,0.3); transition: right 0.4s cubic-bezier(0.4, 0, 0.2, 1); }
+        .call-chat-panel.show { right: 0; }
+        .chat-panel-header { display: flex; justify-content: space-between; align-items: center; padding: 15px; border-bottom: 1px solid var(--border-color); }
+        .chat-panel-header h4 { color: var(--text-primary); }
+        .chat-panel-header button { background: none; border: none; font-size: 24px; cursor: pointer; color: var(--text-secondary); }
+        .call-chat-messages { flex-grow: 1; overflow-y: auto; padding: 15px; }
+        .call-chat-input-area { display: flex; padding: 10px; border-top: 1px solid var(--border-color); }
+        #call-chat-input { flex-grow: 1; border: none; background: var(--secondary-color); border-radius: 18px; padding: 8px 12px; color: var(--text-primary); }
+        #call-chat-input:focus { outline: none; }
+        .call-chat-input-area button { background: var(--primary-color); color: white; border: none; border-radius: 50%; width: 36px; height: 36px; margin-left: 8px; cursor: pointer; }
+        .call-chat-msg { margin-bottom: 10px; }
+        .call-chat-msg strong { color: var(--primary-color); }
+        .call-chat-msg p { margin: 2px 0 0; color: var(--text-secondary); font-size: 14px; }
+
         @media (max-width: 600px) {
-             .call-header-info {
-                padding: 0 10px;
-            }
-            #call-contact-name { font-size: 1.2rem; }
-            #call-status-text { font-size: 0.9rem; }
-
-            .local-video-preview {
-                width: 28%; /* Un poco más pequeño */
-                bottom: 110px; /* Ajustar posición sobre los controles */
-                right: 15px;
-            }
-            .call-controls-bar {
-                padding: 15px;
-                gap: 20px; /* Más espacio entre botones */
-                flex-wrap: wrap; /* Permite que los elementos pasen a la siguiente línea */
-            }
-            .control-button {
-                width: 60px; height: 60px; font-size: 20px;
-            }
-            .control-button.primary {
-                /* El botón de llamar no necesita ser más grande */
-                width: 60px; height: 60px; border-radius: 50%;
-            }
-            /* Ocultar etiquetas en escritorio para un look más limpio */
-            .control-label {
-                display: block; /* Mostrar etiquetas en móvil */
-            }
-            /* Las clases .mobile-only y .hide-on-mobile ya están definidas arriba */
-            /* y funcionan correctamente con esta media query. */
+            .in-call .video-feed.local { width: 30%; max-width: 120px; bottom: 75px; right: 10px; }
+            .call-control-btn { width: 50px; height: 50px; font-size: 18px; }
+            .call-chat-panel { width: 100%; }
         }
     </style>
 </body>

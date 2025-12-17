@@ -117,12 +117,18 @@ const videoCallMainButton = document.getElementById('video-call-main-button');
 const localVideo = document.getElementById('local-video');
 const remoteVideo = document.getElementById('remote-video');
 const videoCallModal = document.getElementById('video-call-modal');
-const startCallButton = document.getElementById('start-call-button');
-const hangupButton = document.getElementById('hangup-button');
-const preCallOverlay = document.getElementById('pre-call-overlay');
 const toggleAudioButton = document.getElementById('toggle-audio-button');
 const toggleVideoButton = document.getElementById('toggle-video-button');
 const userSearchInput = document.getElementById('user-search-input'); // **NUEVO: Referencia al input de búsqueda**
+
+// --- ELEMENTOS DE VIDEOLLAMADA (NUEVO FLUJO) ---
+const startCallButton = document.getElementById('start-call-button');
+const hangupButton = document.getElementById('hangup-button');
+const callStatusOverlay = document.getElementById('call-status-overlay');
+const callStatusText = document.getElementById('call-status-text');
+const toggleCallChatButton = document.getElementById('toggle-call-chat-button');
+const callChatPanel = document.getElementById('call-chat-panel');
+const closeCallChatButton = document.getElementById('close-call-chat-button');
 // --- NUEVO: ELEMENTOS DEL BANNER DE LLAMADA ENTRANTE ---
 const incomingCallBanner = document.getElementById('incoming-call-banner');
 const bannerCallerName = document.getElementById('banner-caller-name');
@@ -131,6 +137,12 @@ const bannerAcceptButton = document.getElementById('banner-accept-button');
 // --- NUEVO: ELEMENTOS DE AUDIO ---
 const ringtoneSound = document.getElementById('ringtone-sound');
 const hangupSound = document.getElementById('hangup-sound');
+// --- NUEVO: ELEMENTOS DEL CHAT DE VIDEOLLAMADA ---
+const callChatForm = document.getElementById('call-chat-form');
+const callChatInput = document.getElementById('call-chat-input');
+const callChatMessages = document.getElementById('call-chat-messages');
+
+
 
 
 
@@ -1643,18 +1655,28 @@ function toggleReaction(messageId, emoji) {
 // ==========================================================
 
 /**
- * Inicia la cámara y el micrófono.
+ * Prepara y muestra el modal de pre-llamada (lobby).
  */
-async function openLocalStream() {
+async function setupPreCallUI() {
+    videoCallModal.style.display = 'block';
+    videoCallModal.classList.remove('in-call'); // Estado de pre-llamada
+    
+    hangupButton.style.display = 'flex'; // Ahora es el botón de cancelar/cerrar
+    startCallButton.style.display = 'flex';
+    toggleCallChatButton.style.display = 'none'; // Ocultar chat en pre-llamada
+    remoteVideo.style.display = 'none';
+
+    callStatusText.textContent = 'Preparando para llamar...';
+    callStatusOverlay.style.display = 'flex';
+
     try {
         localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
         localVideo.srcObject = localStream;
-        preCallOverlay.style.display = 'none'; // Oculta el overlay de "previsualización"
+        callStatusOverlay.style.display = 'none'; // Ocultar overlay si la cámara funciona
         updateMediaButtonUI();
     } catch (error) {
         console.error("Error al acceder a la cámara/micrófono:", error);
-        preCallOverlay.innerHTML = `<p style="color: #e74c3c;">Error al acceder a la cámara/micrófono. Revisa los permisos.</p>`;
-        preCallOverlay.style.display = 'flex';
+        callStatusText.textContent = "Error de cámara/micrófono. Revisa los permisos.";
     }
 }
 
@@ -1691,23 +1713,18 @@ function createPeerConnection(callId) {
  * Inicia una nueva llamada (Caller).
  */
 async function startCall() {
-    if (!activeChatUser) {
-        // **NUEVO: Usar un toast o una alerta más amigable**
-        alert("Selecciona un chat para llamar.");
-        return;
-    }
+    const calleeId = activeChatUser; // **NUEVO: Capturar el usuario activo en el momento de llamar**
 
-    // **CORRECCIÓN**: Asegurarse de que el stream local está listo antes de continuar.
     if (!localStream) {
         alert("No se ha podido acceder a tu cámara y micrófono. Por favor, revisa los permisos y vuelve a intentarlo.");
         return;
     }
 
+    // **MODIFICADO: Cambiar la UI al estado "llamando" usando el nombre correcto**
     startCallButton.style.display = 'none';
-    hangupButton.style.display = 'flex';
-
-    // **NUEVO: Temporizador de 30 segundos para cancelar si no hay respuesta**
-    let callTimeout;
+    videoCallModal.classList.add('in-call');
+    callStatusText.textContent = `Llamando a ${calleeId}...`;
+    callStatusOverlay.style.display = 'flex';
 
     // Crear un nuevo ID único para la llamada en Realtime Database
     const newCallRef = push(callsRef);
@@ -1723,30 +1740,20 @@ async function startCall() {
         type: offerDescription.type,
     };
 
-    // Guardar la oferta y los participantes en Realtime Database
-    await set(newCallRef, { offer, callerId: currentUser, calleeId: activeChatUser });
+    // **MODIFICADO: Guardar la oferta y los participantes correctos en Realtime Database**
+    await set(newCallRef, { offer, callerId: currentUser, calleeId: calleeId });
 
     // Escuchar la respuesta del otro usuario
     onValue(newCallRef, (snapshot) => {
         const data = snapshot.val();
         if (data && data.answer && peerConnection && !peerConnection.currentRemoteDescription) {
-            // **NUEVO: Si se recibe una respuesta, se cancela el temporizador de timeout**
-            if (callTimeout) clearTimeout(callTimeout);
+            // Respuesta recibida, la llamada se ha conectado
+            callStatusOverlay.style.display = 'none';
+            toggleCallChatButton.style.display = 'flex'; // Mostrar botón de chat
 
             const answerDescription = new RTCSessionDescription(data.answer);
             peerConnection.setRemoteDescription(answerDescription);
         }
-    });
-
-    // **NUEVO: Iniciar el temporizador de 30 segundos**
-    callTimeout = setTimeout(() => {
-        // Comprobar si la llamada sigue activa y no ha sido contestada
-        get(newCallRef).then((snapshot) => {
-            if (snapshot.exists() && !snapshot.val().answer) {
-                alert(`${activeChatUser} no ha contestado.`);
-                hangupCall(); // Colgar si no hay respuesta
-            }
-        });
     });
 
     // Escuchar los candidatos ICE del otro usuario
@@ -1754,12 +1761,7 @@ async function startCall() {
     onChildAdded(candidatesRef, (snapshot) => {
         const candidateData = snapshot.val();
         if (!caseInsensitiveEquals(candidateData.sender, currentUser)) {
-            // **CORRECCIÓN CLAVE**: Añadir el candidato a la conexión.
-            // A veces, los candidatos llegan antes de que la conexión esté lista,
-            // por lo que es vital añadirlos tan pronto como se reciben.
-            if (peerConnection) {
-                peerConnection.addIceCandidate(new RTCIceCandidate(candidateData));
-            }
+            if (peerConnection) peerConnection.addIceCandidate(new RTCIceCandidate(candidateData));
         }
     });
 }
@@ -1767,21 +1769,31 @@ async function startCall() {
 /**
  * Responde a una llamada entrante (Callee).
  * @param {string} callId - El ID de la llamada.
- * @param {string} callId - El ID de la llamada.
  * @param {object} offer - La oferta SDP recibida.
  */
 async function answerCall(callId, offer) {
     currentCallId = callId;
-    videoCallModal.style.display = 'flex';
-    await openLocalStream();
-
+    
+    // Mostrar modal y preparar UI para llamada activa
+    videoCallModal.style.display = 'block';
+    videoCallModal.classList.add('in-call');
     startCallButton.style.display = 'none';
     hangupButton.style.display = 'flex';
+    toggleCallChatButton.style.display = 'flex';
+    callStatusText.textContent = 'Conectando...';
+    callStatusOverlay.style.display = 'flex';
+
+    // **CORRECCIÓN: Iniciar cámara y micrófono sin ocultar el vídeo remoto**
+    try {
+        localStream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+        localVideo.srcObject = localStream;
+        updateMediaButtonUI();
+    } catch (error) { console.error("Error al obtener stream en answerCall:", error); }
+
+    if (!localStream) { hangupCall(); return; }
 
     createPeerConnection(callId);
-
     await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-
     const answerDescription = await peerConnection.createAnswer();
     await peerConnection.setLocalDescription(answerDescription);
 
@@ -1792,15 +1804,15 @@ async function answerCall(callId, offer) {
 
     const callNodeRef = ref(database, `calls/${callId}`);
     await update(callNodeRef, { answer });
+    
+    // La llamada se considera conectada
+    callStatusOverlay.style.display = 'none';
 
     // Escuchar los candidatos ICE del otro usuario
     const candidatesRef = ref(database, `calls/${callId}/candidates`);
     onChildAdded(candidatesRef, (snapshot) => {
         const candidateData = snapshot.val();
         if (!caseInsensitiveEquals(candidateData.sender, currentUser)) {
-            // **CORRECCIÓN CLAVE**: Añadir el candidato a la conexión.
-            // Esto asegura que los candidatos del que llama se añadan
-            // a la conexión del que responde.
             if (peerConnection) {
                 peerConnection.addIceCandidate(new RTCIceCandidate(candidateData));
             }
@@ -1831,13 +1843,15 @@ async function hangupCall() {
     videoCallModal.style.display = 'none';
     localVideo.srcObject = null;
     remoteVideo.srcObject = null;
-    startCallButton.style.display = 'flex';
-    hangupButton.style.display = 'none';
-    preCallOverlay.style.display = 'flex';
-    preCallOverlay.innerHTML = `<p>Iniciando cámara...</p>`;
+    videoCallModal.classList.remove('in-call');
+    callChatPanel.classList.remove('show'); // Ocultar chat
+    callChatMessages.innerHTML = ''; // Limpiar chat
     currentCallId = null;
 
-    // hangupSound.play(); // Comentado porque el archivo no existe
+    // **NUEVO**: Detener el sonido de colgar si se estaba reproduciendo
+    if (hangupSound) {
+        hangupSound.play().catch(e => console.warn("No se pudo reproducir sonido de colgar."));
+    }
     console.log("Llamada finalizada.");
 }
 
@@ -1850,7 +1864,11 @@ async function hangupCall() {
 function showIncomingCallBanner(callerId, callId, offer) {
     if (bannerCallerName) bannerCallerName.textContent = callerId;
     if (incomingCallBanner) incomingCallBanner.classList.add('show');
-    if (ringtoneSound) ringtoneSound.play().catch(e => console.warn("No se pudo reproducir el tono de llamada."));
+    // **NUEVO**: Reproducir tono de llamada en bucle
+    if (ringtoneSound) {
+        ringtoneSound.loop = true;
+        ringtoneSound.play().catch(e => console.warn("No se pudo reproducir el tono de llamada."));
+    }
 
     // Configurar el botón de aceptar
     if (bannerAcceptButton) bannerAcceptButton.onclick = async () => {
@@ -1873,6 +1891,7 @@ function closeIncomingCallBanner() {
     if (ringtoneSound) {
         ringtoneSound.pause();
         ringtoneSound.currentTime = 0;
+        ringtoneSound.loop = false;
     }
 }
 
@@ -1925,8 +1944,8 @@ function updateMediaButtonUI() {
     toggleAudioButton.innerHTML = audioEnabled ? '<i class="fas fa-microphone"></i>' : '<i class="fas fa-microphone-slash"></i>';
     toggleVideoButton.innerHTML = videoEnabled ? '<i class="fas fa-video"></i>' : '<i class="fas fa-video-slash"></i>';
 
-    toggleAudioButton.classList.toggle('active', !audioEnabled);
-    toggleVideoButton.classList.toggle('active', !videoEnabled);
+    toggleAudioButton.classList.toggle('toggled-off', !audioEnabled);
+    toggleVideoButton.classList.toggle('toggled-off', !videoEnabled);
 }
 
 // ==========================================================
@@ -2549,45 +2568,9 @@ document.addEventListener('DOMContentLoaded', () => {
     if (userSearchInput) {
         userSearchInput.addEventListener('input', (e) => {
             const searchTerm = e.target.value.trim();
-            // Re-renderizar la lista de conversaciones con el término de búsqueda.
             renderConversationsList(searchTerm);
         });
     }
-
-    // --- EVENT LISTENERS PARA EL NUEVO FLUJO DE VIDEOLLAMADA ---
-    videoCallMainButton.addEventListener('click', async () => {
-        if (!activeChatUser) {
-            alert("Por favor, selecciona un chat para iniciar una videollamada.");
-            return;
-        }
-        videoCallModal.style.display = 'flex';
-        await openLocalStream();
-    });
-
-    startCallButton.addEventListener('click', startCall);
-    hangupButton.addEventListener('click', () => {
-        hangupCall();
-    });
-
-    toggleAudioButton.addEventListener('click', () => {
-        if (localStream) {
-            const audioTrack = localStream.getAudioTracks()[0];
-            if (audioTrack) {
-                audioTrack.enabled = !audioTrack.enabled;
-                updateMediaButtonUI();
-            }
-        }
-    });
-
-    toggleVideoButton.addEventListener('click', () => {
-        if (localStream) {
-            const videoTrack = localStream.getVideoTracks()[0];
-            if (videoTrack) {
-                videoTrack.enabled = !videoTrack.enabled;
-                updateMediaButtonUI();
-            }
-        }
-    });
 
     renderConversationsList();
     listenForIncomingCalls(); // Iniciar el listener de llamadas entrantes
@@ -2609,6 +2592,72 @@ if (deleteChatMessagesButton) {
         }
     });
 }
+
+// ==========================================================
+// --- NUEVO: LISTENERS PARA LA NUEVA UI DE VIDEOLLAMADA ---
+// ==========================================================
+
+videoCallMainButton.addEventListener('click', async () => {
+    if (!activeChatUser) {
+        alert("Por favor, selecciona un chat para iniciar una videollamada.");
+        return;
+    }
+    await setupPreCallUI();
+});
+
+startCallButton.addEventListener('click', startCall);
+hangupButton.addEventListener('click', hangupCall); // Ahora sirve para cancelar y colgar
+
+toggleAudioButton.addEventListener('click', () => {
+    if (localStream) {
+        const audioTrack = localStream.getAudioTracks()[0];
+        if (audioTrack) {
+            audioTrack.enabled = !audioTrack.enabled;
+            updateMediaButtonUI();
+        }
+    }
+});
+
+toggleVideoButton.addEventListener('click', () => {
+    if (localStream) {
+        const videoTrack = localStream.getVideoTracks()[0];
+        if (videoTrack) {
+            videoTrack.enabled = !videoTrack.enabled;
+            updateMediaButtonUI();
+        }
+    }
+});
+
+// --- Lógica del Chat de la Videollamada ---
+toggleCallChatButton.addEventListener('click', () => {
+    callChatPanel.classList.toggle('show');
+});
+
+closeCallChatButton.addEventListener('click', () => {
+    callChatPanel.classList.remove('show');
+});
+
+callChatForm.addEventListener('submit', (e) => {
+    e.preventDefault();
+    const text = callChatInput.value.trim();
+    if (text && currentCallId) {
+        const chatRef = ref(database, `calls/${currentCallId}/chat`);
+        push(chatRef, { sender: currentUser, text });
+        callChatInput.value = '';
+    }
+});
+
+// Escuchar mensajes del chat de la llamada
+onChildAdded(ref(database, `calls/${currentCallId}/chat`), (snapshot) => {
+    if (currentCallId) { // Asegurarse de que estamos en una llamada
+        const msg = snapshot.val();
+        const msgElement = document.createElement('div');
+        msgElement.classList.add('call-chat-msg');
+        msgElement.innerHTML = `<strong>${msg.sender}:</strong><p>${msg.text}</p>`;
+        callChatMessages.appendChild(msgElement);
+        callChatMessages.scrollTop = callChatMessages.scrollHeight;
+    }
+});
 
 /**
  * Elimina todos los mensajes del chat activo de la base de datos y de la vista.
