@@ -190,6 +190,8 @@ const iceServersConfiguration = {
 let peerConnection;
 let localStream;
 let currentCallId = null;
+let isCallInProgress = false; // NUEVO: Control de estado de la llamada
+let iceCandidateQueue = []; // NUEVO: Cola para candidatos ICE
 
 // NUEVAS VARIABLES PARA PAGINACIÓN Y OPTIMIZACIÓN
 const MESSAGES_PER_PAGE = 15; // Lote de 15 mensajes
@@ -1701,6 +1703,9 @@ async function setupPreCallUI() {
 function createPeerConnection(callId) {
     peerConnection = new RTCPeerConnection(iceServersConfiguration);
 
+    // Limpiar la cola de candidatos de una llamada anterior
+    iceCandidateQueue = [];
+
     // Añadir los tracks del stream local a la conexión para enviarlos
     localStream.getTracks().forEach(track => {
         peerConnection.addTrack(track, localStream);
@@ -1739,10 +1744,17 @@ function createPeerConnection(callId) {
  * Inicia una nueva llamada (Caller).
  */
 async function startCall() {
-    const calleeId = activeChatUser; // **NUEVO: Capturar el usuario activo en el momento de llamar**
+    if (isCallInProgress) {
+        console.warn("Ya hay una llamada en curso.");
+        return;
+    }
+    isCallInProgress = true;
+
+    const calleeId = activeChatUser;
 
     if (!localStream) {
         alert("No se ha podido acceder a tu cámara y micrófono. Por favor, revisa los permisos y vuelve a intentarlo.");
+        isCallInProgress = false;
         return;
     }
 
@@ -1756,6 +1768,7 @@ async function startCall() {
     const newCallRef = push(callsRef);
     currentCallId = newCallRef.key;
 
+    // 1. Crear la conexión y añadir los tracks locales ANTES de crear la oferta
     createPeerConnection(currentCallId);
 
     const offerDescription = await peerConnection.createOffer();
@@ -1766,7 +1779,7 @@ async function startCall() {
         type: offerDescription.type,
     };
 
-    // **MODIFICADO: Guardar la oferta y los participantes correctos en Realtime Database**
+    // 2. Guardar la oferta en Firebase para que el destinatario la reciba
     await set(newCallRef, { offer, callerId: currentUser, calleeId: calleeId });
 
     // Escuchar la respuesta del otro usuario
@@ -1777,8 +1790,12 @@ async function startCall() {
             callStatusOverlay.style.display = 'none';
             toggleCallChatButton.style.display = 'flex'; // Mostrar botón de chat
 
-            const answerDescription = new RTCSessionDescription(data.answer);
-            peerConnection.setRemoteDescription(answerDescription);
+            // 3. Establecer la descripción remota y luego procesar los candidatos en cola
+            peerConnection.setRemoteDescription(new RTCSessionDescription(data.answer))
+                .then(() => {
+                    processIceCandidateQueue();
+                })
+                .catch(e => console.error("Error al establecer la respuesta remota:", e));
         }
     });
 
@@ -1786,8 +1803,10 @@ async function startCall() {
     const candidatesRef = ref(database, `calls/${currentCallId}/candidates`);
     onChildAdded(candidatesRef, (snapshot) => {
         const candidateData = snapshot.val();
+        // 4. Poner en cola los candidatos en lugar de añadirlos directamente
         if (!caseInsensitiveEquals(candidateData.sender, currentUser)) {
-            if (peerConnection) peerConnection.addIceCandidate(new RTCIceCandidate(candidateData));
+            const candidate = new RTCIceCandidate(candidateData);
+            peerConnection.remoteDescription ? peerConnection.addIceCandidate(candidate) : iceCandidateQueue.push(candidate);
         }
     });
 }
@@ -1798,6 +1817,11 @@ async function startCall() {
  * @param {object} offer - La oferta SDP recibida.
  */
 async function answerCall(callId, offer) {
+    if (isCallInProgress) {
+        console.warn("Intentando responder una llamada mientras otra está en curso.");
+        return;
+    }
+    isCallInProgress = true;
     currentCallId = callId;
     
     // Mostrar modal y preparar UI para llamada activa
@@ -1815,12 +1839,17 @@ async function answerCall(callId, offer) {
         localVideo.srcObject = localStream;
         updateMediaButtonUI();
     } catch (error) { console.error("Error al obtener stream en answerCall:", error); }
+    
+    if (!localStream) {
+        hangupCall();
+        return;
+    }
 
-    if (!localStream) { hangupCall(); return; }
-
+    // 1. Crear conexión y establecer la descripción remota (la oferta)
     createPeerConnection(callId);
     await peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
-    const answerDescription = await peerConnection.createAnswer();
+
+    const answerDescription = await peerConnection.createAnswer(); // 2. Crear la respuesta
     await peerConnection.setLocalDescription(answerDescription);
 
     const answer = {
@@ -1829,6 +1858,7 @@ async function answerCall(callId, offer) {
     };
 
     const callNodeRef = ref(database, `calls/${callId}`);
+    // 3. Enviar la respuesta a Firebase
     await update(callNodeRef, { answer });
     
     // La llamada se considera conectada
@@ -1838,10 +1868,9 @@ async function answerCall(callId, offer) {
     const candidatesRef = ref(database, `calls/${callId}/candidates`);
     onChildAdded(candidatesRef, (snapshot) => {
         const candidateData = snapshot.val();
+        // 4. Añadir candidatos directamente, ya que la descripción remota ya está establecida
         if (!caseInsensitiveEquals(candidateData.sender, currentUser)) {
-            if (peerConnection) {
-                peerConnection.addIceCandidate(new RTCIceCandidate(candidateData));
-            }
+            if (peerConnection) peerConnection.addIceCandidate(new RTCIceCandidate(candidateData));
         }
     });
 }
@@ -1850,20 +1879,29 @@ async function answerCall(callId, offer) {
  * Cuelga la llamada, limpia los recursos y el estado.
  */
 async function hangupCall() {
+    // 1. Detener todos los tracks de medios (cámara, micrófono)
     if (localStream) {
         localStream.getTracks().forEach(track => track.stop());
         localStream = null;
     }
 
+    // 2. Cerrar la conexión de pares
     if (peerConnection) {
         peerConnection.close();
         peerConnection = null;
     }
 
+    // 3. Eliminar el nodo de la llamada de Firebase para notificar al otro usuario y limpiar
     if (currentCallId) {
         const callNodeRef = ref(database, `calls/${currentCallId}`);
-        await remove(callNodeRef);
+        // Usamos remove() para borrar completamente el nodo de la llamada
+        remove(callNodeRef).catch(e => console.error("Error al limpiar el nodo de la llamada:", e));
     }
+
+    // 4. Limpiar el estado local
+    isCallInProgress = false;
+    currentCallId = null;
+    iceCandidateQueue = [];
 
     // Resetear UI
     videoCallModal.style.display = 'none';
@@ -1872,7 +1910,6 @@ async function hangupCall() {
     videoCallModal.classList.remove('in-call');
     callChatPanel.classList.remove('show'); // Ocultar chat
     callChatMessages.innerHTML = ''; // Limpiar chat
-    currentCallId = null;
 
     // **NUEVO**: Detener el sonido de colgar si se estaba reproduciendo
     if (hangupSound) {
@@ -1940,7 +1977,7 @@ function listenForIncomingCalls() {
     onChildRemoved(callsRef, (snapshot) => {
         const callId = snapshot.key;
         if (callId === currentCallId) {
-            alert("La otra persona ha colgado.");
+            // No mostramos alerta aquí, hangupCall ya se encarga de la limpieza.
             hangupCall();
         }
         closeIncomingCallBanner(); // Cierra el banner si el que llama cancela
