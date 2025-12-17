@@ -167,19 +167,18 @@ let localTimeInterval = null; // **NUEVO: Intervalo para la hora local del conta
 
 // --- 3. CONFIGURACIÓN Y VARIABLES DE WEBRTC ---
 const iceServersConfiguration = {
-    // **CORRECCIÓN: Añadir un servidor TURN para mejorar la conectividad, especialmente en móviles.**
-    // Los servidores STUN son suficientes para conexiones simples, pero TURN es necesario como relé
-    // cuando la conexión directa (P2P) falla, lo cual es común en redes 4G/5G o corporativas.
-    // NOTA: Este es un servidor TURN público y gratuito con limitaciones. Para una aplicación en producción,
-    // deberías considerar un servicio de pago (ej. Twilio) o alojar tu propio servidor Coturn.
+    // **NUEVA CORRECCIÓN: Usar un conjunto de servidores STUN/TURN más robusto para las pruebas.**
+    // El servidor anterior (openrelay) puede ser inestable. Usaremos los servidores públicos de Twilio,
+    // que suelen ser más fiables para desarrollo.
+    // Para una aplicación en producción, lo ideal es contratar un servicio de TURN (como el de Twilio)
+    // o alojar tu propio servidor (Coturn) para garantizar la disponibilidad.
     iceServers: [
-        { urls: 'stun:stun.l.google.com:19302' },
-        { urls: 'stun:stun1.l.google.com:19302' },
-        { urls: 'stun:stun.services.mozilla.com' },
+        { urls: ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"] },
         {
-            urls: "turn:openrelay.metered.ca:80",
-            username: "openrelayproject",
-            credential: "openrelayproject",
+            urls: "turn:global.turn.twilio.com:3478?transport=udp",
+            // NOTA: Estas son credenciales de prueba públicas de Twilio.
+            username: "7b932b5399815b31995856b3455154b2363a909589456255902921568551e6e3",
+            credential: "aV32yfs+gYxK82+3sC2b3UpFjvr9+Wk3J6chWc0b4lY=",
         },
     ],
 };
