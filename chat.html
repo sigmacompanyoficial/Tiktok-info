@@ -1381,6 +1381,12 @@
                         <button class="icon-button" id="mobile-options-button" title="Más opciones">
                             <i class="fas fa-ellipsis-v"></i>
                         </button>
+                        <!-- NUEVO: Menú de acciones, controlado por JS -->
+                        <div id="mobile-actions-menu" class="mobile-actions-menu">
+                            <div class="menu-item" data-action="search-in-chat"><i class="fas fa-search fa-fw"></i> Buscar en el chat</div>
+                            <div class="menu-item" data-action="chat-stats"><i class="fas fa-chart-line fa-fw"></i> Ver estadísticas</div>
+                            <div class="menu-item" data-action="delete-chat-messages"><i class="fas fa-trash fa-fw"></i> Eliminar mensajes</div>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1554,70 +1560,12 @@
     </style>
     <!-- FIN Banner de Llamada Entrante -->
 
-    <!-- <audio id="notification-sound" src="notification.mp3" preload="auto"></audio> -->
-    <!-- <audio id="ringtone-sound" src="ringtone.mp3" preload="auto" loop></audio> -->
-    <!-- <audio id="hangup-sound" src="hangup.mp3" preload="auto"></audio> -->
+    <audio id="notification-sound" src="notification.mp3" preload="auto"></audio>
+    <audio id="ringtone-sound" src="ringtone.mp3" preload="auto" loop></audio>
+    <audio id="calling-sound" src="pitido.mp3" preload="auto" loop></audio> <!-- NUEVO: Sonido de llamada saliente -->
+    <audio id="hangup-sound" src="hangup.mp3" preload="auto"></audio>
 
     <script type="module" src="chat.js"></script>
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const username = sessionStorage.getItem('username');
-            if (username) {
-                const userAvatarMain = document.getElementById('user-avatar-main');
-                if (userAvatarMain) {
-                    userAvatarMain.textContent = username.charAt(0).toUpperCase();
-                }
-            }
-
-            // Lógica para el menú de acciones en móvil
-            const mobileOptionsButton = document.getElementById('mobile-options-button');
-            const chatHeaderActions = document.querySelector('.chat-header-actions');
-            let mobileMenu = null;
-
-            // --- NUEVO: Crear botones de acción ocultos para que el script pueda hacerles 'click' ---
-            const hiddenActions = document.createElement('div');
-            hiddenActions.style.display = 'none';
-            hiddenActions.innerHTML = `
-                <!-- El botón de videollamada ya no necesita estar aquí, está visible en el header -->
-                <button id="search-in-chat-button"></button>
-                <button id="chat-stats-button"></button>
-                <button id="delete-chat-messages-button"></button>
-            `;
-            document.body.appendChild(hiddenActions);
-
-            mobileOptionsButton.addEventListener('click', (e) => {
-                e.stopPropagation();
-                if (!mobileMenu) {
-                    mobileMenu = document.createElement('div');
-                    mobileMenu.className = 'mobile-actions-menu';
-                    mobileMenu.innerHTML = `
-                        <div class="menu-item" data-action="video-call-main"><i class="fas fa-video fa-fw"></i> Iniciar videollamada</div>
-                        <div class="menu-item" data-action="search-in-chat"><i class="fas fa-search fa-fw"></i> Buscar en el chat</div>
-                        <div class="menu-item" data-action="chat-stats"><i class="fas fa-chart-line fa-fw"></i> Ver estadísticas</div>
-                        <div class="menu-item" data-action="delete-chat-messages"><i class="fas fa-trash fa-fw"></i> Eliminar mensajes</div>
-                    `;
-                    document.querySelector('.mobile-actions-wrapper').appendChild(mobileMenu);
-
-                    mobileMenu.addEventListener('click', (event) => {
-                        const action = event.target.closest('.menu-item')?.dataset.action;
-                        if (action) {
-                            // Si la acción es la videollamada, usamos el ID correcto
-                            const buttonId = action === 'video-call-main' ? 'video-call-main-button' : `${action.replace(/-/g, '-')}-button`;
-                            const buttonToClick = document.getElementById(buttonId);
-                            if (buttonToClick) buttonToClick.click();
-
-                            mobileMenu.classList.remove('show');
-                        }
-                    });
-
-                    document.addEventListener('click', () => {
-                        mobileMenu?.classList.remove('show');
-                    });
-                }
-                mobileMenu.classList.toggle('show');
-            });
-        });
-    </script>
     <!-- ================================================== -->
     <!-- === NUEVO: MODAL DE VIDEOLLAMADA (PANTALLA COMPLETA) === -->
     <!-- ================================================== -->
@@ -1677,16 +1625,25 @@
         .video-feed.remote { z-index: 3001; display: none; }
         
         /* Estado en llamada: el vídeo local se hace pequeño */
-        .in-call .video-feed.local {
+        .call-modal-overlay.in-call .video-feed.local {
             width: 25%; height: auto; aspect-ratio: 16/9;
             max-width: 220px; bottom: 85px; right: 20px;
             top: auto; left: auto; border-radius: 12px;
             border: 2px solid rgba(255,255,255,0.3); box-shadow: 0 5px 20px rgba(0,0,0,0.5);
+            cursor: move; /* NUEVO: Indica que es arrastrable */
         }
-        .in-call .video-feed.remote { display: block; }
+        /* NUEVO: Estilo mientras se arrastra para evitar selección de texto */
+        .video-feed.local.is-dragging {
+            cursor: grabbing;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+        .call-modal-overlay.in-call .video-feed.remote { display: block; }
 
         .call-status-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 3005; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; color: white; font-size: 1.5rem; font-weight: 600; text-shadow: 1px 1px 5px #000; }
-        .call-ui-container { position: absolute; bottom: 0; left: 0; width: 100%; z-index: 3010; padding: 20px; background: linear-gradient(to top, rgba(0,0,0,0.7), transparent); }
+        .call-ui-container { position: absolute; bottom: 0; left: 0; width: 100%; z-index: 3010; padding: 20px; background: linear-gradient(to top, rgba(0,0,0,0.7), transparent); transition: opacity 0.3s ease-in-out; }
+        /* NUEVO: Clase para ocultar los controles */
+        .call-ui-container.controls-hidden { opacity: 0; pointer-events: none; }
         .call-controls { display: flex; justify-content: center; align-items: center; gap: 16px; }
         .call-control-btn { width: 56px; height: 56px; border-radius: 50%; border: none; cursor: pointer; font-size: 20px; color: white; display: flex; align-items: center; justify-content: center; transition: all 0.2s; background-color: rgba(255, 255, 255, 0.2); }
         .call-control-btn:hover { background-color: rgba(255, 255, 255, 0.3); }
@@ -1711,7 +1668,7 @@
         .call-chat-msg p { margin: 2px 0 0; color: var(--text-secondary); font-size: 14px; }
 
         @media (max-width: 600px) {
-            .in-call .video-feed.local { width: 30%; max-width: 120px; bottom: 75px; right: 10px; }
+            .call-modal-overlay.in-call .video-feed.local { width: 30%; max-width: 120px; bottom: 75px; right: 10px; }
             .call-control-btn { width: 50px; height: 50px; font-size: 18px; }
             .call-chat-panel { width: 100%; }
         }

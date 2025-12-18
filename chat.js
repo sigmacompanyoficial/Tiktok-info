@@ -137,6 +137,7 @@ const bannerAcceptButton = document.getElementById('banner-accept-button');
 // --- NUEVO: ELEMENTOS DE AUDIO ---
 const ringtoneSound = document.getElementById('ringtone-sound');
 const hangupSound = document.getElementById('hangup-sound');
+const callingSound = document.getElementById('calling-sound'); // NUEVO: Sonido de llamada saliente
 // --- NUEVO: ELEMENTOS DEL CHAT DE VIDEOLLAMADA ---
 const callChatForm = document.getElementById('call-chat-form'); // Formulario del chat de llamada
 const callChatInput = document.getElementById('call-chat-input'); // Input del chat de llamada
@@ -174,7 +175,9 @@ const iceServersConfiguration = {
         { urls: 'turn:openrelay.metered.ca:80', username: 'openrelayproject', credential: 'openrelayproject' },
         { urls: 'turn:openrelay.metered.ca:443', username: 'openrelayproject', credential: 'openrelayproject' },
         { urls: 'turn:openrelay.metered.ca:443?transport=tcp', username: 'openrelayproject', credential: 'openrelayproject' },
-    ],    
+    ],
+    rtcpMuxPolicy: 'require', // **OPTIMIZACIÓN: Fuerza a RTP y RTCP a usar el mismo puerto.**
+    sdpSemantics: 'unified-plan', // **OPTIMIZACIÓN: Usa el plan unificado estándar.**
     iceCandidatePoolSize: 10, // Optimización para recoger candidatos más rápido
 };
 
@@ -185,6 +188,7 @@ let currentCallId = null;
 let isCallInProgress = false; // Control de estado de la llamada
 let iceCandidateQueue = []; // Cola para candidatos ICE
 let callListeners = {}; // Almacena los listeners de Firebase para poder limpiarlos
+let controlsTimeout; // **NUEVO: Temporizador para ocultar controles de llamada**
 
 // NUEVAS VARIABLES PARA PAGINACIÓN Y OPTIMIZACIÓN
 const MESSAGES_PER_PAGE = 15; // Lote de 15 mensajes
@@ -1679,6 +1683,7 @@ async function setupPreCallUI() {
     remoteVideo.style.display = 'none';
     remoteVideo.srcObject = null;
 
+
     callStatusText.textContent = 'Preparando para llamar...';
     callStatusOverlay.style.display = 'flex';
 
@@ -1698,6 +1703,7 @@ async function setupPreCallUI() {
  * @param {string} callId - El ID de la llamada en Realtime Database.
  */
 function createPeerConnection(callId) {
+    if (peerConnection) peerConnection.close();
     // 1. Crear la conexión con la configuración de servidores ICE
     peerConnection = new RTCPeerConnection(iceServersConfiguration);
 
@@ -1762,11 +1768,23 @@ async function initiateCall() {
         return;
     }
 
+// **NUEVO: Detener todos los sonidos de llamada**
+if (callingSound) {
+    callingSound.pause();
+    callingSound.currentTime = 0;
+}
+
     // Cambiar la UI al estado "llamando..."
     startCallButton.style.display = 'none';
     videoCallModal.classList.add('in-call');
     callStatusText.textContent = `Llamando a ${calleeId}...`;
     callStatusOverlay.style.display = 'flex';
+
+// **NUEVO: Reproducir sonido de llamada saliente en bucle**
+if (callingSound) {
+    callingSound.loop = true;
+    callingSound.play().catch(e => console.warn("No se pudo reproducir el sonido de llamada saliente."));
+}
 
     // Crear un ID único para la llamada en Firebase
     const newCallRef = push(callsRef);
@@ -1791,6 +1809,13 @@ async function initiateCall() {
     const callRefListener = onValue(newCallRef, (snapshot) => {
         const data = snapshot.val();
         // Si la respuesta llega y aún no la hemos procesado...
+        if (data && data.answer) {
+            // **NUEVO: Detener el sonido de llamada saliente cuando contestan**
+            if (callingSound) {
+                callingSound.pause();
+                callingSound.currentTime = 0;
+            }
+        }
         if (data && data.answer && peerConnection && !peerConnection.currentRemoteDescription) {
             console.log("Respuesta (Answer) recibida de Firebase.");
             // 5. Establecer la descripción remota y luego procesar los candidatos en cola
@@ -1845,6 +1870,7 @@ async function answerCall(callId, offer) {
     remoteStream = new MediaStream();
     remoteVideo.srcObject = remoteStream;
     remoteVideo.style.display = 'block';
+    showCallControls(); // **NUEVO: Asegurarse de que los controles sean visibles al responder**
 
     // 3. Iniciar cámara y micrófono locales
     try {
@@ -1904,6 +1930,11 @@ function hangupCall() {
         if (chatListener) chatListener(); // Detiene el listener del chat
         delete callListeners[currentCallId];
     }
+
+    // **NUEVO: Detener cualquier sonido de llamada que esté activo**
+    if (ringtoneSound) { ringtoneSound.pause(); ringtoneSound.currentTime = 0; }
+    if (callingSound) { callingSound.pause(); callingSound.currentTime = 0; }
+
 
     // 2. Detener todos los tracks de medios (cámara, micrófono)
     if (localStream) {
@@ -2024,6 +2055,11 @@ function listenForIncomingCalls() {
         const callId = snapshot.key;
         if (callId === currentCallId && isCallInProgress) {
                 if (callData.status === 'rejected') {
+                    // **NUEVO: Detener el sonido de llamada saliente si rechazan**
+                    if (callingSound) {
+                        callingSound.pause();
+                        callingSound.currentTime = 0;
+                    }
                     alert(`${callData.calleeId} ha rechazado la llamada.`);
                     hangupCall();
                 }
@@ -2656,41 +2692,6 @@ function highlightTextInNode(node, searchTerm) {
 
 // --- Event Listeners para Búsqueda ---
 
-// INICIALIZACIÓN
-document.addEventListener('DOMContentLoaded', () => {
-    // --- Event Listeners para Búsqueda (Corregido) ---
-    const statsButton = document.getElementById('chat-stats-button');
-    if (statsButton) statsButton.addEventListener('click', openStatsModal);
-
-    if (searchInChatButton) searchInChatButton.addEventListener('click', openSearch);
-    if (closeSearchButton) closeSearchButton.addEventListener('click', closeSearch);
-    if (searchInput) searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); executeSearch(); } });
-    if (prevResultButton) prevResultButton.addEventListener('click', () => navigateToSearchResult(currentSearchResultIndex - 1));
-    if (nextResultButton) nextResultButton.addEventListener('click', () => navigateToSearchResult(currentSearchResultIndex + 1));
-
-    const username = sessionStorage.getItem('username');
-    if (username) {
-        const userAvatarMain = document.getElementById('user-avatar-main');
-        if (userAvatarMain) {
-            userAvatarMain.textContent = username.charAt(0).toUpperCase();
-        }
-    }
-    
-    // **CORRECCIÓN: Llamar a autoResize en la carga inicial para el input/textarea**
-    autoResize(); 
-    
-    // **CORRECCIÓN: Mover el listener del buscador de usuarios a la inicialización.**
-    if (userSearchInput) {
-        userSearchInput.addEventListener('input', (e) => {
-            const searchTerm = e.target.value.trim();
-            renderConversationsList(searchTerm);
-        });
-    }
-
-    renderConversationsList();
-    listenForIncomingCalls(); // Iniciar el listener de llamadas entrantes
-});
-
 // ==========================================================
 // --- 10. LÓGICA DE ELIMINACIÓN DE MENSAJES DE CHAT (NUEVO) ---
 // ==========================================================
@@ -2716,6 +2717,7 @@ videoCallMainButton.addEventListener('click', async () => {
     await setupPreCallUI();
 });
 
+
 startCallButton.addEventListener('click', () => {
     // **NUEVO**: Preparar el stream remoto antes de iniciar la llamada
     remoteStream = new MediaStream();
@@ -2725,9 +2727,11 @@ startCallButton.addEventListener('click', () => {
     initiateCall();
 });
 
+
 hangupButton.addEventListener('click', () => {
     hangupCall();
 });
+
 
 toggleAudioButton.addEventListener('click', () => {
     if (localStream) {
@@ -2738,6 +2742,7 @@ toggleAudioButton.addEventListener('click', () => {
         }
     }
 });
+
 
 toggleVideoButton.addEventListener('click', () => {
     if (localStream) {
@@ -2975,6 +2980,184 @@ function loadChatStatistics() {
                     }
                 }
             }
+        }
+    });
+}
+
+/**
+ * **NUEVO: Configura todos los listeners de eventos principales de la aplicación.**
+ * Se ejecuta una vez que el DOM está completamente cargado.
+ */
+function setupEventListeners() {
+    // --- Búsqueda de usuarios en la lista de chats ---
+    if (userSearchInput) {
+        userSearchInput.addEventListener('input', (e) => {
+            renderConversationsList(e.target.value.trim());
+        });
+    }
+
+    // --- Búsqueda de mensajes dentro de un chat ---
+    if (closeSearchButton) closeSearchButton.addEventListener('click', closeSearch);
+    if (searchInput) searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); executeSearch(); } });
+    if (prevResultButton) prevResultButton.addEventListener('click', () => navigateToSearchResult(currentSearchResultIndex - 1));
+    if (nextResultButton) nextResultButton.addEventListener('click', () => navigateToSearchResult(currentSearchResultIndex + 1));
+
+    // --- Lógica del menú de acciones del chat (el botón de "...") ---
+    const mobileOptionsButton = document.getElementById('mobile-options-button');
+    if (mobileOptionsButton) {
+        mobileOptionsButton.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const mobileMenu = document.getElementById('mobile-actions-menu');
+            if (mobileMenu) mobileMenu.classList.toggle('show');
+        });
+    }
+
+    // --- **CORRECCIÓN CLAVE: Delegación de eventos para acciones dinámicas** ---
+    // Se escucha en el documento para capturar clics en botones que pueden no existir al cargar la página.
+    document.addEventListener('click', (e) => {
+        const target = e.target;
+        const menuItem = target.closest('.menu-item');
+        const messageWrapper = target.closest('.message-wrapper');
+
+        // 1. Clic en una opción del menú de acciones ("...")
+        if (menuItem) {
+            const action = menuItem.dataset.action;
+            switch (action) {
+                case 'search-in-chat':
+                    openSearch();
+                    break;
+                case 'chat-stats':
+                    openStatsModal();
+                    break;
+                case 'delete-chat-messages':
+                    if (confirm(`¿Estás seguro de que quieres eliminar todos los mensajes de este chat con "${activeChatUser}"?`)) {
+                        deleteMessagesForCurrentChat();
+                    }
+                    break;
+            }
+            const mobileMenu = document.getElementById('mobile-actions-menu');
+            if (mobileMenu) mobileMenu.classList.remove('show');
+        }
+
+        // 2. Clic en el botón de editar de un mensaje
+        if (target.closest('.edit-button') && messageWrapper) {
+            e.stopPropagation();
+            const messageId = messageWrapper.id;
+            const message = allMessages[messageId];
+            if (message) {
+                openEditModal(messageId, message);
+                closeAllMessageActions();
+            }
+        }
+
+        // 3. Cerrar el menú de acciones si se hace clic fuera
+        const mobileMenu = document.getElementById('mobile-actions-menu');
+        if (mobileMenu && !target.closest('#mobile-options-button')) {
+            mobileMenu.classList.remove('show');
+        }
+    });
+}
+
+// ==========================================================
+// --- INICIALIZACIÓN DE LA APLICACIÓN ---
+// ==========================================================
+document.addEventListener('DOMContentLoaded', () => {
+    setupEventListeners();
+    setupDraggableVideo();
+    setupAutoHideControls();
+    renderConversationsList();
+    listenForIncomingCalls();
+    autoResize();
+});
+
+// ==========================================================
+// --- 13. MEJORAS DE UI PARA VIDEOLLAMADA (NUEVO) ---
+// ==========================================================
+
+/**
+ * Configura la lógica para hacer el vídeo local arrastrable durante una llamada.
+ */
+function setupDraggableVideo() {
+    let isDragging = false;
+    let offsetX, offsetY;
+
+    const startDrag = (e) => {
+        // Solo permitir arrastrar si la llamada está activa (el vídeo es pequeño)
+        if (!videoCallModal.classList.contains('in-call')) return;
+
+        isDragging = true;
+        localVideo.classList.add('is-dragging');
+
+        // Determinar si es un evento de ratón o táctil
+        const clientX = e.clientX || e.touches[0].clientX;
+        const clientY = e.clientY || e.touches[0].clientY;
+
+        offsetX = clientX - localVideo.offsetLeft;
+        offsetY = clientY - localVideo.offsetTop;
+
+        // Prevenir acciones por defecto como el scroll en móviles
+        e.preventDefault();
+    };
+
+    const doDrag = (e) => {
+        if (!isDragging) return;
+
+        const clientX = e.clientX || e.touches[0].clientX;
+        const clientY = e.clientY || e.touches[0].clientY;
+
+        let newLeft = clientX - offsetX;
+        let newTop = clientY - offsetY;
+
+        // Limitar el movimiento a los bordes de la ventana
+        const modal = videoCallModal;
+        newLeft = Math.max(0, Math.min(newLeft, modal.clientWidth - localVideo.offsetWidth));
+        newTop = Math.max(0, Math.min(newTop, modal.clientHeight - localVideo.offsetHeight));
+
+        localVideo.style.left = `${newLeft}px`;
+        localVideo.style.top = `${newTop}px`;
+        // **IMPORTANTE**: Anular 'right' y 'bottom' del CSS para que 'left' y 'top' funcionen
+        localVideo.style.right = 'auto';
+        localVideo.style.bottom = 'auto';
+    };
+
+    const stopDrag = () => {
+        if (!isDragging) return;
+        isDragging = false;
+        localVideo.classList.remove('is-dragging');
+    }
+
+    localVideo.addEventListener('mousedown', startDrag);
+    localVideo.addEventListener('touchstart', startDrag, { passive: false });
+
+    document.addEventListener('mousemove', doDrag);
+    document.addEventListener('touchmove', doDrag, { passive: false });
+
+    document.addEventListener('mouseup', stopDrag);
+    document.addEventListener('touchend', stopDrag);
+}
+
+/**
+ * Configura la lógica para mostrar/ocultar los controles de la llamada.
+ */
+function setupAutoHideControls() {
+    const controlsContainer = document.querySelector('.call-ui-container');
+
+    // Función para mostrar los controles y programar su ocultación
+    window.showCallControls = () => {
+        if (controlsTimeout) clearTimeout(controlsTimeout);
+        controlsContainer.classList.remove('controls-hidden');
+
+        // Ocultar después de 5 segundos de inactividad
+        controlsTimeout = setTimeout(() => {
+            controlsContainer.classList.add('controls-hidden');
+        }, 5000);
+    };
+
+    // Mostrar los controles al tocar/hacer clic en el modal de la llamada
+    videoCallModal.addEventListener('click', (e) => {
+        // Solo activar si la llamada está en curso y no se hizo clic en un botón
+        if (videoCallModal.classList.contains('in-call') && e.target.closest('.call-control-btn') === null) {
+            showCallControls();
         }
     });
 }
