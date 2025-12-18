@@ -3160,4 +3160,4 @@ function setupAutoHideControls() {
             showCallControls();
         }
     });
-}
+} }
